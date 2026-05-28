@@ -1,0 +1,28 @@
+{
+  "name": "academy",
+  "version": "0.3.0-phase0",
+  "description": "Academy v3 — portable AI agents with 8 boot surfaces, skills primitive, and Subspace platform integration.",
+  "type": "module",
+  "bin": {
+    "academy": "./bin/academy"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "skills/",
+    "templates/",
+    "hooks/",
+    ".claude-plugin/"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [
+    "academy",
+    "ai-agent",
+    "claude-code",
+    "portable-agent"
+  ],
+  "author": "Joe Fernandez",
+  "license": "MIT"
+}

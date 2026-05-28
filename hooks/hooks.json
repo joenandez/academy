@@ -1,0 +1,86 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/observe_turn.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py identity"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py mission-priorities"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py how-you-work-1"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py how-you-work-2"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py tasks"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py workboard"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py notes-r2"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py performance-feedback"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py intel-frameworks"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py intel-works"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py intel-pitfalls"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py intel-consensus"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py summary-projects"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py memory-cli"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py experiments"
+          },
+          {
+            "type": "command",
+            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} ACADEMY_AGENT_DIR=${CLAUDE_PLUGIN_ROOT} python3 ${CLAUDE_PLUGIN_ROOT}/.ops/scripts/inject_section.py changelog"
+          }
+        ]
+      }
+    ]
+  }
+}

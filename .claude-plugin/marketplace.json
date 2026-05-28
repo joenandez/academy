@@ -1,0 +1,14 @@
+{
+  "name": "academy-local",
+  "description": "Local marketplace for the Academy v3 plugin",
+  "owner": {
+    "name": "Joe Fernandez"
+  },
+  "plugins": [
+    {
+      "name": "academy",
+      "source": ".",
+      "description": "Academy v3 — portable AI agents."
+    }
+  ]
+}
