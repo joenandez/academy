@@ -35,6 +35,7 @@ SURFACES = (
     "dailys",
 )
 
+
 def resolve_agent_dir() -> Path | None:
     """Resolve the agent directory.
 

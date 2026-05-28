@@ -6,7 +6,8 @@ Portable AI agents on top of [Subspace's](https://github.com/codename/subspace) 
 
 Academy v3 is a Claude Code plugin that creates **portable, workspace-aware agents**.
 Each agent lives at `~/.academy/agents/<name>/` with eight tight boot surfaces
-loaded into every session via SessionStart hooks (~5–6k tokens combined).
+compiled into `.claude/academy-system-prompt.md` on every `academy run`
+(~5–6k tokens combined).
 
 | Surface | Contains | Soft cap |
 | --- | --- | --- |
@@ -20,21 +21,27 @@ loaded into every session via SessionStart hooks (~5–6k tokens combined).
 | `dailys.md` | Last 7 working days | ~1000 |
 
 Plus a unified **skills** primitive at `.claude/skills/` covering both
-Academy-owned universal skills (`check-in`, `self-update`) and agent/domain
-skills.
+Academy-owned universal skills (`check-in`, `self-update`,
+`nightly-consolidation`) and agent/domain skills. Subspace-backed agent
+sessions are copied into `memory/observations/` for nightly consolidation,
+which writes observable reports under `dreams/`.
 
 This repo is the v3 successor to `the_academy` per the Phase 0 plan in
 `docs/tasks/academy-v3/concepts/scope.md` (in `the_academy`).
 
 ## Phase 0 scope
 
-- 8 boot files and universal skills, scaffolded by `academy create`
-- 8 per-file SessionStart hooks (`hooks/inject_surface.py`)
+- 8 boot files, `dreams/`, and universal skills, scaffolded by `academy create`
+- Generated Claude Code system prompt file from the 8 boot surfaces, refreshed
+  before every v3 `academy run`
+- Agent-specific memory archive at `memory/observations/`, populated from
+  Subspace observations by a lightweight Stop hook
+- Nightly Helm task registration for v3 memory consolidation
 - Hire flow that runs domain research and produces all 8 surfaces
 - Subspace platform dependencies (memory, scheduler, email, tasks) used **as-is** — no adapters
 
 Out of scope until later phases: notes graduation, knowledge curation, skill
-spawning, agent-scoped CLI flags, daily primitives.
+spawning, agent-scoped CLI flags, and weekly strategy review.
 
 ## CLI
 
@@ -58,7 +65,8 @@ academy --help
 
 For Claude Code plugin discovery, `academy run <name>` creates a project-local
 `.academy/agents/<name>/` plugin instance and launches Claude Code with
-`--plugin-dir` pointed there.
+`--plugin-dir` pointed there. It also passes `--system-prompt-file` pointing at
+the generated `.claude/academy-system-prompt.md` artifact for the agent.
 
 ## Layout
 
@@ -70,8 +78,8 @@ academy/
 ├── skills/hire/SKILL.md      # v3 hire skill
 ├── templates/skills/         # universal skill templates copied into agents
 └── hooks/
-    ├── hooks.json            # 8 SessionStart entries
-    └── inject_surface.py     # one-surface-per-call injector
+    ├── hooks.json            # lifecycle hook config
+    └── sync_memory.mjs       # Stop hook memory bridge
 ```
 
 ## Design notes (read the full scope for context)
@@ -80,8 +88,12 @@ academy/
   feature request against the relevant project, not glue here.
 - **Skills are the unifying primitive.** Same file shape for "competencies the
   agent has" and "how-to-use-Subspace-CLI" docs.
-- **Per-file SessionStart hooks.** No manifest, no chunking, no inject_section.
-  Each surface is a single command in `hooks/hooks.json`.
+- **Generated system prompt.** The 8 boot surfaces remain editable Markdown
+  sources. `academy create` and `academy run` compile them into
+  `.claude/academy-system-prompt.md`; launch-time rendering is local file IO
+  only, while slower consolidation remains nightly/manual.
+- **Lifecycle hooks only.** Hooks are reserved for runtime side effects such as
+  the Stop memory bridge, not startup context transport.
 - **Portable plugin layout.** Each agent has a `.claude-plugin/` symlink to
-  this package, so running Claude Code in `~/.academy/agents/<name>/` boots
-  the 8 surfaces automatically.
+  this package, so running Claude Code in `~/.academy/agents/<name>/` keeps the
+  Academy lifecycle hooks available.

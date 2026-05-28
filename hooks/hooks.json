@@ -1,40 +1,12 @@
 {
   "hooks": {
-    "SessionStart": [
+    "Stop": [
       {
-        "matcher": "startup|resume|compact|clear",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py identity"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py role"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py knowledge"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py goals"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py priorities"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py threads"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py notes"
-          },
-          {
-            "type": "command",
-            "command": "ACADEMY_SESSION_TYPE=${ACADEMY_SESSION_TYPE} python3 ${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py dailys"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/sync_memory.mjs"
           }
         ]
       }
