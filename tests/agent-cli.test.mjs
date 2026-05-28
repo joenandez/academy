@@ -8,6 +8,7 @@ import test from 'node:test';
 const repoRoot = realpathSync(new URL('..', import.meta.url));
 const cli = join(repoRoot, 'bin', 'academy');
 const node = process.execPath;
+const surfaces = ['identity', 'role', 'knowledge', 'goals', 'priorities', 'threads', 'notes', 'dailys'];
 
 function runCli(args, options = {}) {
   return execFileSync(node, [cli, ...args], {
@@ -19,6 +20,31 @@ function runCli(args, options = {}) {
     cwd: options.cwd ?? repoRoot,
   });
 }
+
+test('plugin manifest declares Academy and points at the v3 hook config', () => {
+  const manifest = JSON.parse(readFileSync(join(repoRoot, '.claude-plugin', 'plugin.json'), 'utf8'));
+
+  assert.equal(manifest.name, 'academy');
+  assert.match(manifest.description, /Academy v3/);
+  assert.equal(manifest.version, '0.3.0-phase0');
+  assert.equal(manifest.hooks, 'hooks/hooks.json');
+});
+
+test('hook config loads the eight v3 surfaces and no legacy v2 hook scripts', () => {
+  const config = JSON.parse(readFileSync(join(repoRoot, 'hooks', 'hooks.json'), 'utf8'));
+  const sessionStart = config.hooks.SessionStart;
+
+  assert.equal(config.hooks.Stop, undefined);
+  assert.equal(sessionStart.length, 1);
+  assert.equal(sessionStart[0].matcher, 'startup|resume|compact|clear');
+  assert.deepEqual(
+    sessionStart[0].hooks.map((hook) => hook.command),
+    surfaces.map((surface) => `ACADEMY_SESSION_TYPE=\${ACADEMY_SESSION_TYPE} python3 \${CLAUDE_PLUGIN_ROOT}/hooks/inject_surface.py ${surface}`),
+  );
+
+  const serialized = JSON.stringify(config);
+  assert.doesNotMatch(serialized, /inject_section|observe_turn|\.ops/);
+});
 
 test('run launches from the project cwd with a project-local plugin dir', () => {
   const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));

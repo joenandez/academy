@@ -1,5 +1,6 @@
 {
-  "name": "growth-analytics",
-  "description": "Growth Analytics Lead",
-  "version": "1.0.0"
+  "name": "academy",
+  "description": "Academy v3 — portable AI agents.",
+  "version": "0.3.0-phase0",
+  "hooks": "hooks/hooks.json"
 }
