@@ -1,0 +1,346 @@
+{
+  "meta": {
+    "feature": "academy notes CLI",
+    "generated_at": "2026-05-28T00:00:00Z",
+    "schema_version": 1,
+    "objective": "Add an append-only `academy notes add/list` subcommand so agents can cheaply capture short-lived steering into notes.md.",
+    "scope": {
+      "in_scope": [
+        "`academy notes add [<agent>] \"text\"` appends one Markdown bullet via appendFileSync (no full-file read)",
+        "`academy notes list [<agent>] [--last N]` prints the last N note bullets (default 12)",
+        "Agent resolution via explicit arg, then ACADEMY_AGENT_DIR / ACADEMY_AGENT_HOME / ACADEMY_AGENT_NAME env",
+        "Local-time timestamp format `- YYYY-MM-DD HH:MM: text`",
+        "Scaffold notes.md template instructs agents to use `academy notes add`",
+        "CLI regression tests + direct CLI validation"
+      ],
+      "out_of_scope": [
+        "Auto-deletion, expiry, graduation to other surfaces/skills",
+        "Dedupe, ranking, search, LLM summarization",
+        "JSON/DB storage layer",
+        "File locking / concurrency coordination",
+        "edit/delete/clear subactions"
+      ]
+    },
+    "out_of_bounds": [
+      "No auto-deletion, expiry, or pruning of old notes",
+      "No graduation/promotion to knowledge.md / role.md / identity.md / skills",
+      "No dedupe, ranking, search, or LLM summarization",
+      "No JSON or DB storage layer — Markdown file only",
+      "No file locking / concurrency coordination for appends",
+      "No --edit, --delete, or --clear subactions",
+      "No reading the whole notes file on add",
+      "No new third-party dependencies"
+    ],
+    "requirements_trace": [
+      {
+        "id": "REQ-001",
+        "description": "`notes add \"text\"` appends a Markdown bullet without reading the whole file",
+        "source": "notes-cli-spec.md §Behavior",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-002",
+        "description": "`notes add <agent> \"text\"` targets an explicit agent",
+        "source": "notes-cli-spec.md §Commands",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-003",
+        "description": "`notes list` prints recent bullets, default last 12",
+        "source": "notes-cli-spec.md §Behavior",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-004",
+        "description": "`notes list --last N` honors the count",
+        "source": "notes-cli-spec.md §Commands",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-005",
+        "description": "Resolve agent via ACADEMY_AGENT_DIR/HOME/NAME when no explicit arg",
+        "source": "notes-cli-spec.md §Behavior",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-006",
+        "description": "Unresolvable agent fails with a short usage hint",
+        "source": "notes-cli-spec.md §Behavior",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-007",
+        "description": "Missing notes file for a valid agent is handled gracefully on list",
+        "source": "notes-cli-spec.md §Tests",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-008",
+        "description": "Appended line uses local time `- YYYY-MM-DD HH:MM: text`",
+        "source": "notes-cli-spec.md §Appended Format",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-009",
+        "description": "Default notes.md scaffold instructs agents to use `academy notes add`",
+        "source": "notes-cli-spec.md §Agent Instruction",
+        "tasks": [
+          "1.1"
+        ]
+      },
+      {
+        "id": "REQ-010",
+        "description": "CLI tests cover add/list/resolution/error paths; validated via real binary",
+        "source": "notes-cli-spec.md §Tests + CLAUDE.md",
+        "tasks": [
+          "1.1",
+          "1.2"
+        ]
+      }
+    ],
+    "architecture_context": {
+      "where_this_fits": [
+        "Single-file CLI `scripts/agent.mjs` (Node ESM, no deps), launched via `bin/academy`",
+        "Operates on the `notes.md` boot surface in each agent home under AGENTS_ROOT (~/.academy/agents/<name>)"
+      ],
+      "technical_approach": [
+        "Extend parseArgs switch (agent.mjs:58) and main() dispatch (agent.mjs:727) following existing command wiring",
+        "Reuse agentDir/validateName (agent.mjs:116,105) and the existing temp-AGENTS_ROOT spawn test pattern",
+        "Append with node:fs appendFileSync (new import) — never read+rewrite the file"
+      ],
+      "key_decisions": [
+        "Env var is ACADEMY_AGENT_DIR (what runAgent actually sets); accept ACADEMY_AGENT_HOME as spec-compat synonym",
+        "Explicit <agent> arg beats env vars",
+        "list treats only top-level `- `-prefixed lines as bullets; missing file => graceful empty"
+      ]
+    },
+    "coverage_summary": {
+      "requirements_extracted": 10,
+      "requirements_with_task_coverage": 10,
+      "phases": 1,
+      "parent_tasks": 2,
+      "subtasks": 6
+    }
+  },
+  "phases": [
+    {
+      "id": "1",
+      "title": "`academy notes` command",
+      "summary": "Add the append-only notes add/list subcommand to the academy CLI and validate it via the real binary.",
+      "status": "done",
+      "parents": [
+        {
+          "id": "1.1",
+          "title": "Implement `academy notes` add/list in scripts/agent.mjs",
+          "description": "Add arg parsing, agent resolution, add/list handlers, dispatch, usage text, and the scaffold instruction for the new notes subcommand, test-first.",
+          "status": "done",
+          "predecessor": "none",
+          "unblocks": "1.2",
+          "subtasks": [
+            {
+              "id": "1.1.1",
+              "title": "Write failing tests for `academy notes` add/list/resolution/errors",
+              "type": "RED",
+              "status": "done",
+              "produces": "Failing node --test cases pinning notes add/list behavior",
+              "consumed_by": "1.1.4",
+              "replaces": "N/A",
+              "context": [
+                {
+                  "path": "tests/agent-cli.test.mjs",
+                  "anchor": "whole file",
+                  "note": "Existing node --test suite; spawns bin/academy against temp AGENTS_ROOT — mirror this harness"
+                },
+                {
+                  "path": "docs/tasks/notes-cli/specs/plan.md",
+                  "anchor": "§5 Verification",
+                  "note": "Verification spine to encode as assertions"
+                }
+              ],
+              "predecessor": "none",
+              "acceptance_criteria": [
+                {
+                  "type": "state",
+                  "text": "tests/agent-cli.test.mjs contains new cases for: add from agent home, add by explicit agent name, env (ACADEMY_AGENT_DIR + ACADEMY_AGENT_HOME) resolution, list default 12, list --last N, unresolvable-agent error, and missing-notes-file graceful list."
+                },
+                {
+                  "type": "test",
+                  "text": "The new notes tests fail (command not implemented yet) when run via `node --test tests/agent-cli.test.mjs`."
+                }
+              ]
+            },
+            {
+              "id": "1.1.2",
+              "title": "Add notes parseArgs case, resolveAgentDir helper, and appendFileSync import",
+              "type": "Build",
+              "status": "done",
+              "produces": "A `{ command:'notes', action, name, text, last }` descriptor and a resolveAgentDir(explicitName) helper",
+              "consumed_by": "1.1.3, 1.1.4",
+              "replaces": "N/A",
+              "context": [
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 58",
+                  "note": "parseArgs switch — add case 'notes' parsing action/agent/text/--last"
+                },
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 116",
+                  "note": "agentDir + validateName (line 105) to reuse for explicit-name path"
+                },
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 18",
+                  "note": "node:fs import — add appendFileSync"
+                }
+              ],
+              "predecessor": "1.1.1",
+              "acceptance_criteria": [
+                {
+                  "type": "observable",
+                  "text": "parseArgs(['notes','add','hello']) and parseArgs(['notes','list','--last','5']) return descriptors with correct action/text/last fields."
+                },
+                {
+                  "type": "state",
+                  "text": "scripts/agent.mjs imports `appendFileSync` from node:fs and defines `resolveAgentDir` implementing precedence: explicit arg -> ACADEMY_AGENT_DIR -> ACADEMY_AGENT_HOME -> ACADEMY_AGENT_NAME -> error."
+                }
+              ]
+            },
+            {
+              "id": "1.1.3",
+              "title": "Implement notesAdd and notesList handlers",
+              "type": "Build",
+              "status": "done",
+              "produces": "notesAdd (local-time bullet appended) and notesList (last-N bullet printer) functions",
+              "consumed_by": "main() dispatch (1.1.4)",
+              "replaces": "N/A",
+              "context": [
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 686",
+                  "note": "cleanAgent — mirror validate->resolve dir->guard exists->act->console.log shape"
+                },
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 386",
+                  "note": "notes_path = join(dir,'notes.md') — target file location"
+                },
+                {
+                  "path": "docs/tasks/notes-cli/specs/plan.md",
+                  "anchor": "§2 Technical Approach",
+                  "note": "add appends only; list filters `- ` lines, last N default 12; local-time stamp"
+                }
+              ],
+              "predecessor": "1.1.2",
+              "acceptance_criteria": [
+                {
+                  "type": "observable",
+                  "text": "notesAdd appends a single line `- YYYY-MM-DD HH:MM: <text>\\n` (local time) using appendFileSync with no prior read of the file."
+                },
+                {
+                  "type": "observable",
+                  "text": "notesList reads notes.md, prints only the last N top-level `- ` bullets (default 12), and prints nothing/`(no notes)` with exit 0 when the file is missing."
+                }
+              ]
+            },
+            {
+              "id": "1.1.4",
+              "title": "Wire main() dispatch, printUsage, and notes.md scaffold instruction; turn RED green",
+              "type": "Build",
+              "status": "done",
+              "produces": "Working `academy notes` command surfaced in usage and reflected in the notes.md scaffold",
+              "consumed_by": "End users / agents invoking `academy notes`; 1.2 validation",
+              "replaces": "N/A",
+              "context": [
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 727",
+                  "note": "main() switch — add case 'notes' calling the handlers"
+                },
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 80",
+                  "note": "printUsage + header comment (line 9) — document notes add/list"
+                },
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 263",
+                  "note": "TEMPLATES['notes.md'] scaffold — add `academy notes add \"...\"` instruction"
+                }
+              ],
+              "predecessor": "1.1.3",
+              "acceptance_criteria": [
+                {
+                  "type": "test",
+                  "text": "All notes tests added in 1.1.1 pass via `node --test tests/agent-cli.test.mjs`, and no existing tests regress (`node --test tests/*.test.mjs`)."
+                },
+                {
+                  "type": "state",
+                  "text": "printUsage output and TEMPLATES['notes.md'] both reference `academy notes add`."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "1.2",
+          "title": "Validate `academy notes` via the real CLI binary",
+          "description": "Per CLAUDE.md, exercise the real bin/academy notes command matrix against an isolated temp AGENTS_ROOT and record observed results.",
+          "status": "done",
+          "predecessor": "1.1",
+          "unblocks": "terminal",
+          "subtasks": [
+            {
+              "id": "1.2.1",
+              "title": "Exercise the real `bin/academy notes` use-case matrix against a temp AGENTS_ROOT",
+              "type": "Integration",
+              "status": "done",
+              "produces": "A recorded command/result matrix proving the CLI works end-to-end",
+              "consumed_by": "Definition of done (CLAUDE.md CLI validation)",
+              "replaces": "N/A",
+              "context": [
+                {
+                  "path": "bin/academy",
+                  "anchor": "whole file",
+                  "note": "Real entry point to invoke (not internal functions)"
+                },
+                {
+                  "path": "scripts/agent.mjs",
+                  "anchor": "line 44",
+                  "note": "AGENTS_ROOT honors env override — point it at a temp dir for isolation"
+                }
+              ],
+              "predecessor": "none",
+              "acceptance_criteria": [
+                {
+                  "type": "observable",
+                  "text": "Running real `AGENTS_ROOT=<tmp> bin/academy notes add <agent> \"...\"` then `... notes list <agent>` shows the appended bullet with `- YYYY-MM-DD HH:MM:` format; `--last N`, env-resolution, and missing-agent error cases all behave as specified."
+                },
+                {
+                  "type": "state",
+                  "text": "Final response summarizes the exact CLI commands run and observed results; no real user agent state was mutated."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

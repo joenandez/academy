@@ -22,6 +22,158 @@ function runCli(args, options = {}) {
   });
 }
 
+// Run the CLI expecting a non-zero exit; return { status, stdout, stderr }.
+function runCliExpectFail(args, options = {}) {
+  try {
+    execFileSync(node, [cli, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, ACADEMY_SKIP_NIGHTLY_TASK: '1', ...options.env },
+      cwd: options.cwd ?? repoRoot,
+    });
+    throw new Error('expected CLI to exit non-zero, but it succeeded');
+  } catch (err) {
+    if (typeof err.status !== 'number') throw err;
+    return { status: err.status, stdout: err.stdout ?? '', stderr: err.stderr ?? '' };
+  }
+}
+
+const BULLET_RE = /^- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: /;
+
+test('notes add appends a bulleted note from an agent home', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+
+  runCli(['notes', 'add', 'User prefers short status updates before file edits'], {
+    cwd: agentDir,
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: agentDir, ACADEMY_AGENT_NAME: 'kai' },
+  });
+
+  const notes = readFileSync(join(agentDir, 'notes.md'), 'utf8');
+  const bullets = notes.split('\n').filter((l) => BULLET_RE.test(l));
+  assert.equal(bullets.length, 1);
+  assert.match(bullets[0], /User prefers short status updates before file edits/);
+});
+
+test('notes add by explicit agent name targets only that agent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  runCli(['create', 'bob'], { env: { AGENTS_ROOT: agentsRoot } });
+
+  runCli(['notes', 'add', 'bob', 'A note for bob only'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: '', ACADEMY_AGENT_NAME: '' },
+  });
+
+  const bobNotes = readFileSync(join(agentsRoot, 'bob', 'notes.md'), 'utf8');
+  const kaiNotes = readFileSync(join(agentsRoot, 'kai', 'notes.md'), 'utf8');
+  assert.match(bobNotes, /A note for bob only/);
+  assert.doesNotMatch(kaiNotes, /A note for bob only/);
+});
+
+test('notes add resolves the agent from ACADEMY_AGENT_DIR', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+
+  runCli(['notes', 'add', 'env dir resolution works'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: agentDir, ACADEMY_AGENT_NAME: '' },
+  });
+
+  assert.match(readFileSync(join(agentDir, 'notes.md'), 'utf8'), /env dir resolution works/);
+});
+
+test('notes add resolves the agent from ACADEMY_AGENT_HOME', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+
+  runCli(['notes', 'add', 'env home resolution works'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: '', ACADEMY_AGENT_HOME: agentDir, ACADEMY_AGENT_NAME: '' },
+  });
+
+  assert.match(readFileSync(join(agentDir, 'notes.md'), 'utf8'), /env home resolution works/);
+});
+
+test('notes list defaults to the most recent 12 notes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+  const env = { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: agentDir };
+
+  for (let i = 1; i <= 15; i++) {
+    runCli(['notes', 'add', `note number ${i}`], { env });
+  }
+
+  const out = runCli(['notes', 'list'], { env });
+  const listed = out.split('\n').filter((l) => BULLET_RE.test(l));
+  assert.equal(listed.length, 12);
+  assert.match(listed[listed.length - 1], /note number 15/);
+  assert.doesNotMatch(out, /note number 3\b/);
+});
+
+test('notes list honors --last N', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+  const env = { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: agentDir };
+
+  for (let i = 1; i <= 6; i++) {
+    runCli(['notes', 'add', `entry ${i}`], { env });
+  }
+
+  const out = runCli(['notes', 'list', '--last', '3'], { env });
+  const listed = out.split('\n').filter((l) => BULLET_RE.test(l));
+  assert.equal(listed.length, 3);
+  assert.match(out, /entry 6/);
+  assert.doesNotMatch(out, /entry 3\b/);
+});
+
+test('notes list on an agent with no notes file exits 0', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  const agentDir = join(agentsRoot, 'kai');
+  mkdirSync(agentDir, { recursive: true }); // agent home exists, but no notes.md
+
+  const out = runCli(['notes', 'list'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: agentDir },
+  });
+  assert.doesNotMatch(out, BULLET_RE);
+});
+
+test('create surfaces the notes CLI: prompt header, permission, and self-update skill', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+
+  const prompt = readFileSync(join(agentDir, '.claude', 'academy-system-prompt.md'), 'utf8');
+  assert.match(prompt, /academy notes add/);
+
+  const settings = JSON.parse(readFileSync(join(agentDir, '.claude', 'settings.local.json'), 'utf8'));
+  assert.ok(settings.permissions.allow.includes('Bash(academy:*)'));
+
+  const selfUpdate = readFileSync(join(agentDir, '.claude', 'skills', 'self-update', 'SKILL.md'), 'utf8');
+  assert.match(selfUpdate, /academy notes add/);
+  assert.match(selfUpdate, /academy notes list/);
+});
+
+test('notes add with no resolvable agent fails with a usage hint', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+
+  const { status, stderr } = runCliExpectFail(['notes', 'add', 'orphan note'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_AGENT_DIR: '', ACADEMY_AGENT_HOME: '', ACADEMY_AGENT_NAME: '' },
+  });
+  assert.notEqual(status, 0);
+  assert.match(stderr, /academy notes/);
+});
+
 test('plugin manifest declares Academy and points at the v3 hook config', () => {
   const manifest = JSON.parse(readFileSync(join(repoRoot, '.claude-plugin', 'plugin.json'), 'utf8'));
 

@@ -42,6 +42,21 @@ current text, make a change, or preserve surrounding context.
 Default to `notes.md` first unless the update is clearly durable. Graduation
 happens when the note proves reusable, not merely because it is recent.
 
+## Capturing To notes.md
+
+Write transient steering with the CLI, not by hand-editing the file:
+
+- Append: `academy notes add "User prefers short status updates before edits"`
+- Review recent: `academy notes list` (last 12) or `academy notes list --last 20`
+
+`add` is append-only and never reads the whole file, so it is the cheap, default
+way to jot a note mid-task. Capture proactively — corrections, stakeholder
+facts, caveats, gotchas, and raw learnings — the moment they appear, rather than
+waiting for a check-in. Reserve manual `Edit` of `notes.md` for curation:
+pruning stale bullets, or rewriting before graduating content elsewhere. Keep
+the visible list within the ~8-12 cap; if it is overflowing, graduate or expire,
+do not just keep appending.
+
 ## File Routing
 
 - `identity.md`: rare. Mission, principles, voice, durable persona. Update only
@@ -58,7 +73,8 @@ happens when the note proves reusable, not merely because it is recent.
 - `threads.md`: active work pursuits and their state. Update when starting,
   pausing, resuming, parking, or finishing work.
 - `notes.md`: temporary steering, observations, corrections, raw learnings,
-  pending curation.
+  pending curation. Append with `academy notes add "..."` (see "Capturing To
+  notes.md"); hand-edit only to curate or graduate.
 - `dailys.md`: concise session/day summaries. What happened, decisions,
   blockers, next step.
 - `.claude/skills/`: repeatable procedures. Create or edit only when there is a

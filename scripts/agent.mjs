@@ -14,8 +14,10 @@
  *   academy clean <name>      Clear transient agent state (notes/threads — not destructive)
  *   academy destroy <name>    Remove an agent (--force required)
  *   academy root              Print Academy package root
+ *   academy notes add/list    Append-only micro-steering on an agent's notes.md
  */
 import {
+  appendFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -66,6 +68,7 @@ function parseArgs(argv) {
     case 'clean':   return { command, name: rest[0] };
     case 'destroy': return { command, name: rest[0], force: rest.includes('--force') };
     case 'root':    return { command };
+    case 'notes':   return parseNotesArgs(rest);
     default:
       console.error(`Unknown command: ${command}`);
       return { command: 'help', exitCode: 1 };
@@ -75,6 +78,44 @@ function parseArgs(argv) {
 function extractPassthrough(rest) {
   const dashIdx = rest.indexOf('--');
   return dashIdx >= 0 ? rest.slice(dashIdx + 1) : [];
+}
+
+// `notes add [<agent>] "text"` and `notes list [<agent>] [--last N]`. The first
+// positional token is treated as an agent only when it looks like an agent name
+// (NAME_RE) AND there is more to follow — so quoted single-arg text stays text.
+function parseNotesArgs(rest) {
+  const action = rest[0];
+  if (action !== 'add' && action !== 'list') {
+    console.error(`Unknown notes action: ${action ?? '(none)'}. Use 'add' or 'list'.`);
+    return { command: 'help', exitCode: 1 };
+  }
+  const args = rest.slice(1);
+
+  if (action === 'add') {
+    let name;
+    let textParts = args;
+    if (args.length >= 2 && NAME_RE.test(args[0])) {
+      name = args[0];
+      textParts = args.slice(1);
+    }
+    return { command: 'notes', action, name, text: textParts.join(' ') };
+  }
+
+  // list — pull out --last N (or --last=N), the rest is an optional agent name.
+  let last = 12;
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--last') {
+      last = Number.parseInt(args[++i], 10);
+    } else if (args[i].startsWith('--last=')) {
+      last = Number.parseInt(args[i].slice('--last='.length), 10);
+    } else {
+      positional.push(args[i]);
+    }
+  }
+  if (!Number.isInteger(last) || last <= 0) last = 12;
+  const name = positional[0] && NAME_RE.test(positional[0]) ? positional[0] : undefined;
+  return { command: 'notes', action, name, last };
 }
 
 function printUsage() {
@@ -89,12 +130,16 @@ Commands:
   clean <name>            Truncate transient surfaces (notes.md, threads.md)
   destroy <name> --force  Remove an agent and all its files
   root                    Print Academy package root
+  notes add [<agent>] "…" Append a short note to the agent's notes.md
+  notes list [<agent>] [--last N]  Show recent notes (default last 12)
 
 Examples:
   academy create kai
   academy hire
   academy run kai
   academy run kai -- -p "Run today's analytics review"
+  academy notes add "User prefers short status updates before edits"
+  academy notes list --last 20
   `.trim());
 }
 
@@ -264,6 +309,10 @@ _Created: ${today}._
 `# Notes
 
 _(Micro-steering staging area — 8–12 visible cap. Graduate or expire.)_
+
+_Capture temporary steering, corrections, stakeholder facts, caveats, and raw
+learnings here with_ \`academy notes add "..."\` _— it appends a timestamped
+bullet without rewriting this file. Review with_ \`academy notes list\`_._
 
 _(none yet)_
 
@@ -437,6 +486,8 @@ function renderAcademySystemPrompt(dir, name) {
     '',
     'You are an Academy v3 agent. Treat the following surfaces as your durable identity, role, knowledge, goals, priorities, active threads, notes, and recent daily context.',
     '',
+    'Capture transient steering cheaply with `academy notes add "..."` — it appends a timestamped bullet to your notes.md without reading the whole file. Use it for corrections, stakeholder facts, caveats, and raw learnings before they are durable enough for another surface; review with `academy notes list`. The self-update skill explains when a note should graduate or expire.',
+    '',
     ...SURFACES.flatMap((surface) => [
       `<!-- academy:surface:${surface} -->`,
       readSurface(dir, surface),
@@ -464,6 +515,7 @@ function writeSettingsLocal(dir) {
   const settings = {
     permissions: {
       allow: [
+        'Bash(academy:*)',
         'Bash(helm:*)',
         'Bash(helm-tasks:*)',
         'Bash(subspace-memory:*)',
@@ -719,6 +771,75 @@ function destroyAgent(name, force) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// `notes` — append-only micro-steering staging on an agent's notes.md
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Resolve the target agent home for a notes command. Precedence: explicit
+// <agent> arg → ACADEMY_AGENT_DIR → ACADEMY_AGENT_HOME (spec synonym) →
+// ACADEMY_AGENT_NAME → error. The *_DIR/_HOME vars are absolute agent-home
+// paths; ACADEMY_AGENT_DIR is what `academy run` exports.
+function resolveNotesAgentDir(explicitName) {
+  if (explicitName) {
+    validateName(explicitName);
+    return agentDir(explicitName);
+  }
+  if (process.env.ACADEMY_AGENT_DIR) return process.env.ACADEMY_AGENT_DIR;
+  if (process.env.ACADEMY_AGENT_HOME) return process.env.ACADEMY_AGENT_HOME;
+  if (process.env.ACADEMY_AGENT_NAME) return agentDir(process.env.ACADEMY_AGENT_NAME);
+  console.error('Error: no agent resolved for `academy notes`.');
+  console.error('Pass an agent name, or run inside an agent so ACADEMY_AGENT_DIR is set.');
+  console.error('Usage: academy notes add [<agent>] "text"  |  academy notes list [<agent>] [--last N]');
+  process.exit(1);
+}
+
+function ensureAgentHome(dir) {
+  if (!existsSync(dir)) {
+    console.error(`Agent home not found at ${dir}`);
+    process.exit(1);
+  }
+  return dir;
+}
+
+// Local-time stamp `YYYY-MM-DD HH:MM` (not UTC — spec §Appended Format).
+function localNoteStamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function notesAdd(name, text) {
+  if (!text || !text.trim()) {
+    console.error('Error: note text required.');
+    console.error('Usage: academy notes add [<agent>] "text"');
+    process.exit(1);
+  }
+  const dir = ensureAgentHome(resolveNotesAgentDir(name));
+  const notesPath = join(dir, 'notes.md');
+  // Append-only: never read or rewrite the whole file (spec §Behavior).
+  appendFileSync(notesPath, `- ${localNoteStamp()}: ${text}\n`);
+  console.log(`Noted → ${notesPath}`);
+}
+
+function notesList(name, last) {
+  const dir = ensureAgentHome(resolveNotesAgentDir(name));
+  const notesPath = join(dir, 'notes.md');
+  if (!existsSync(notesPath)) {
+    console.log('(no notes yet)');
+    return;
+  }
+  // A note bullet is a top-level `- ` line — excludes headers, `_(…)_` italics,
+  // and `---` rules in the scaffold.
+  const bullets = readFileSync(notesPath, 'utf8')
+    .split('\n')
+    .filter((line) => line.startsWith('- '));
+  const recent = bullets.slice(-last);
+  if (recent.length === 0) {
+    console.log('(no notes yet)');
+    return;
+  }
+  console.log(recent.join('\n'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -749,6 +870,10 @@ function main() {
       break;
     case 'root':
       console.log(ACADEMY_ROOT);
+      break;
+    case 'notes':
+      if (parsed.action === 'add') notesAdd(parsed.name, parsed.text);
+      else notesList(parsed.name, parsed.last);
       break;
     default:
       printUsage();
