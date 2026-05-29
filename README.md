@@ -2,6 +2,40 @@
 
 Portable AI agents on top of [Subspace's](https://github.com/codename/subspace) agent platform.
 
+## Getting started
+
+**Prerequisites**
+
+- **Node.js v18+** — the CLI is pure ESM Node with zero npm dependencies.
+- **Claude Code CLI** (`claude` on your PATH) — required by `academy run` and
+  `academy hire`, which spawn it.
+- **Subspace + Helm CLIs** (`subspace`, `subspace-memory`, `helm-tasks`) —
+  needed for memory sync, nightly consolidation, and task scheduling. Basic
+  commands (`create`, `list`, `clean`) work without them; the full agent
+  lifecycle does not.
+
+**Clone and link**
+
+```bash
+git clone <repo-url> academy
+cd academy
+npm link        # makes `academy` available globally (no deps to install)
+academy --help
+```
+
+There is no build step and no `npm install` — `npm link` is all you need.
+
+**Verify it works**
+
+```bash
+academy root              # prints the package root — confirms the link resolved
+academy list              # lists agents (empty on a fresh machine)
+academy create test-agent # scaffolds ~/.academy/agents/test-agent/
+academy run test-agent    # launches Claude Code against the current project
+```
+
+Agents live at `~/.academy/agents/<name>/`, created on first `create`/`hire`.
+
 ## What this is
 
 Academy v3 is a Claude Code plugin that creates **portable, workspace-aware agents**.
