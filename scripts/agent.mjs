@@ -634,14 +634,15 @@ function hireAgent() {
 
 function launchClaude(args, { cwd, env, message }) {
   console.log(message);
+  const claudeBin = process.env.ACADEMY_CLAUDE_BIN || 'claude';
   if (process.env.ACADEMY_DRY_RUN === '1') {
-    console.log(`[dry-run] claude ${args.join(' ')}`);
+    console.log(`[dry-run] ${claudeBin} ${args.join(' ')}`);
     console.log(`[dry-run] cwd=${cwd}`);
     if (env?.ACADEMY_AGENT_DIR) console.log(`[dry-run] ACADEMY_AGENT_DIR=${env.ACADEMY_AGENT_DIR}`);
     if (env?.ACADEMY_PROJECT_DIR) console.log(`[dry-run] ACADEMY_PROJECT_DIR=${env.ACADEMY_PROJECT_DIR}`);
     process.exit(0);
   }
-  const result = spawnSync('claude', args, { stdio: 'inherit', cwd, env });
+  const result = spawnSync(claudeBin, args, { stdio: 'inherit', cwd, env });
   process.exit(result.status ?? 0);
 }
 
