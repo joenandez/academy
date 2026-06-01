@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function readPayload() {
   try {
@@ -76,8 +77,20 @@ function subspaceObservationsDir(env) {
   const workspace = env.GROVE_WORKSPACE_NAME;
   if (!project || !workspace) return null;
 
-  const dir = join(env.HOME || homedir(), '.subspace', project, workspace, 'memory', 'observations');
-  return existsSync(dir) ? dir : null;
+  const roots = [
+    env.SUBSPACE_HOME,
+    join(env.HOME || homedir(), '.subspace'),
+  ].filter(Boolean);
+
+  for (const root of roots) {
+    const dir = join(root, project, workspace, 'memory', 'observations');
+    if (existsSync(dir)) return dir;
+  }
+  return null;
+}
+
+function memorySyncEnabled(env) {
+  return env.GROVE_MEMORY_ENABLED === '1' || env.GROVE_MEMORY_ENABLED === 'true';
 }
 
 export function syncAcademyMemory(payload, env = process.env) {
@@ -91,7 +104,7 @@ export function syncAcademyMemory(payload, env = process.env) {
   recordSession(memoryDir, payload, env);
 
   const subspaceDir = subspaceObservationsDir(env);
-  if (!subspaceDir || !env.GROVE_MEMORY_ENABLED) return { synced: 0 };
+  if (!subspaceDir || !memorySyncEnabled(env)) return { synced: 0 };
 
   let synced = 0;
   for (const date of syncDates()) {
@@ -122,6 +135,15 @@ export function syncAcademyMemory(payload, env = process.env) {
   return { synced };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+  }
+}
+
+if (isMainModule()) {
   syncAcademyMemory(readPayload());
 }
