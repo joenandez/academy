@@ -180,7 +180,7 @@ test('plugin manifest declares Academy and points at the v3 hook config', () => 
   assert.equal(manifest.name, 'academy');
   assert.match(manifest.description, /Academy v3/);
   assert.equal(manifest.version, '0.3.0-phase0');
-  assert.equal(manifest.hooks, 'hooks/hooks.json');
+  assert.equal(manifest.hooks, './hooks/hooks.json');
 });
 
 test('hook config keeps Stop memory sync and no startup context injection hooks', () => {
