@@ -183,6 +183,31 @@ test('plugin manifest declares Academy and points at the v3 hook config', () => 
   assert.equal(manifest.hooks, './hooks/hooks.json');
 });
 
+test('hire skill reports readiness before starting knowledge enrichment', () => {
+  const skill = readFileSync(join(repoRoot, 'skills', 'hire', 'SKILL.md'), 'utf8');
+  const summaryIndex = skill.indexOf('## Step 7 — Hiring memo + completion report');
+  const enrichmentIndex = skill.indexOf('## Step 8 — Start background knowledge enrichment');
+
+  assert.notEqual(summaryIndex, -1);
+  assert.notEqual(enrichmentIndex, -1);
+  assert.ok(summaryIndex < enrichmentIndex);
+  assert.match(skill, /Do \*\*not\*\* run\s+research in Step 6/);
+  assert.match(skill, /Present this completion report \*\*before\*\* kicking off research/);
+  assert.match(skill, /Starter knowledge written\. Background enrichment is underway/);
+  assert.match(skill, /helm-tasks schedule[\s\S]*--id \{slug\}-knowledge-enrichment/);
+});
+
+test('hire skill does not configure email during hire', () => {
+  const skill = readFileSync(join(repoRoot, 'skills', 'hire', 'SKILL.md'), 'utf8');
+
+  assert.match(skill, /No email setup/);
+  assert.match(skill, /helm-email/);
+  assert.doesNotMatch(skill, /Step \d+ .*Email Setup/i);
+  assert.doesNotMatch(skill, /academy config/);
+  assert.doesNotMatch(skill, /academy email setup/);
+  assert.doesNotMatch(skill, /agentmail_api_key|user_email|agentmail\.to/);
+});
+
 test('hook config keeps Stop memory sync and no startup context injection hooks', () => {
   const config = JSON.parse(readFileSync(join(repoRoot, 'hooks', 'hooks.json'), 'utf8'));
   const sessionStart = config.hooks.SessionStart;

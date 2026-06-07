@@ -621,9 +621,9 @@ function helmFailureReason(output, status) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function hireAgent() {
-  // The hire skill (installed at user level) is the orchestrator: it runs
-  // research, synthesizes the 8 surfaces, calls `academy create <slug>` itself,
-  // and writes content into the agent dir.
+  // The hire skill is the orchestrator: it calls `academy create <slug>`,
+  // writes runnable starter surfaces, then schedules knowledge enrichment
+  // after the user-facing hiring summary.
   // Positional arg seeds the first user message; session stays interactive.
   launchClaude(['--plugin-dir', ACADEMY_ROOT, 'run /hire'], {
     cwd: ACADEMY_ROOT,

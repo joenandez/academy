@@ -1,14 +1,16 @@
 ---
 name: hire
-description: Hire an Academy v3 agent through a task-first conversation. Produces eight boot surfaces (identity, role, knowledge, goals, priorities, threads, notes, dailys), writes domain knowledge, and optionally registers a scheduled work session. Boots context budget ~5–6k tokens.
+description: Hire an Academy v3 agent through a task-first conversation. Creates a runnable agent before research completes, writes starter boot surfaces, schedules background knowledge enrichment, and optionally registers a scheduled work session. Boots context budget ~5–6k tokens after enrichment.
 disable-model-invocation: true
 ---
 
 # Academy v3 — Hire flow
 
 Hire an autonomous Academy v3 agent. The user describes the work they need
-done. You synthesize a persona, run domain research, and write the **eight
-boot files** that will be loaded into every session via SessionStart hooks:
+done. You synthesize a persona and write the **eight boot files** that will be
+loaded into every session via SessionStart hooks. The agent must be runnable
+before domain research completes; research is an automatic enrichment step
+after the hiring summary.
 
 | File | Contains | Soft cap |
 | --- | --- | --- |
@@ -21,8 +23,9 @@ boot files** that will be loaded into every session via SessionStart hooks:
 | `notes.md` | Micro-steering staging area (starts empty) | ~500 tokens |
 | `dailys.md` | Last 7 working days (starts empty) | ~1000 tokens |
 
-**Total target: ~5–6k tokens.** Budget matters — the hire flow's job is to
-keep these surfaces tight, not to maximize content.
+**Total target after enrichment: ~5–6k tokens.** Budget matters — the hire
+flow's job is to get the agent working quickly, then let the knowledge base
+deepen without blocking first use.
 
 ---
 
@@ -45,7 +48,7 @@ user has skipped two consecutive questions, or the user says "ship it."
 
 - Generic discovery questions ("what are your goals?", "any other requirements?")
 - Compound questions wearing a trenchcoat ("what's X and Y and Z?")
-- Asking the user for information research subagents could find — those questions go to the subagents
+- Blocking first use on information research subagents could find — write the starter agent first and let background enrichment handle it
 - Padding `identity.md` / `role.md` sections you can't defend with conviction — prefer a thinner section over filler
 - Sanding off the user's opinions into corporate prose during synthesis
 - Letting research dominate the draft so it reads like "what the internet thinks" — the user's specific situation outranks generic best practices when they conflict
@@ -153,7 +156,9 @@ If the agent is on-demand, skip.
 ## Step 6 — Generation gate
 
 **Critical: execute steps 6a → 6i in a single response.** No stopping mid-flow,
-no asking permission to continue, no splitting across messages.
+no asking permission to continue, no splitting across messages. Do **not** run
+research in Step 6. Step 6 creates a useful, runnable agent from the user's
+inputs and strong role defaults.
 
 ### 6a — Scaffold the portable agent dir
 
@@ -171,49 +176,20 @@ This creates `~/.academy/agents/{slug}/` with:
 - `.claude/settings.local.json` (permissions)
 - `.claude-plugin/` symlink (loads the 8 SessionStart hooks)
 
-### 6b — Dispatch parallel research
+### 6b — Establish provisional-first status
 
-Dispatch **4 research subagents in parallel** in a single message using the
-Agent tool. Each researches one dimension of the role. Use
-`subagent_type: spectre:web-research` (or any web research subagent
-available).
+Treat the scaffold as an immediately usable agent, not a placeholder waiting
+for research. The first pass should be honest about what is known:
 
-Brief the user before dispatch: *"Kicking off research while we keep
-talking — four agents covering domain, failure modes, tools, and contested
-ground."*
-
-**Subagent A — Domain & SOTA**
-> You are researching [ROLE] for an agent we're hiring. Produce a concise
-> dossier covering: (1) category map — what is the actual landscape of
-> this work? (2) state of the art — best-known practitioners, tools,
-> frameworks, methodologies right now; (3) 3–5 non-obvious principles a
-> smart outsider wouldn't guess. Prefer primary sources (practitioner
-> blogs, talks, books by named authors) over SEO listicles. Surface
-> opinions, don't hedge.
-
-**Subagent B — Failure modes**
-> Research the 3–5 most common ways [ROLE] goes wrong. Be specific. "Bad
-> communication" is not a failure mode; "optimizes for the measurable
-> proxy rather than the actual outcome" is. Cite concrete examples or
-> post-mortems where possible.
-
-**Subagent C — Tools & decision heuristics**
-> For [ROLE], research: (1) standard tools and frameworks with context
-> for when each is appropriate; (2) decision heuristics practitioners use
-> ("when X, prefer Y because Z"); (3) reference checklists, runbooks, or
-> evaluation rubrics that exist in this space.
-
-**Subagent D — Contested opinions & adjacent fields**
-> Where do thoughtful practitioners in [ROLE] genuinely disagree? What
-> roles or fields are commonly confused with this one but are actually
-> different? These are the highest-signal areas for the interview to
-> probe.
-
-Wait for all four to complete before proceeding. While they run, you may
-ask the user 1–2 sharp bridge questions ("where do most people in this
-space get it wrong?" / "what would make you fire this agent in month
-one?"). Their output feeds 6c, 6d, and 6e. If the hire includes a recurring
-responsibility, it may also feed the optional scheduled-work skill in 6f.
+- Use only the user's answers, concrete source material they supplied, and
+  strong archetype defaults.
+- Mark `knowledge.md` as a starter knowledge base with background enrichment
+  pending.
+- Add one active thread for the background knowledge enrichment job so the
+  agent can see that deeper research is already underway.
+- Do not mention email setup or provisioning. Academy does not configure email
+  during hire; agents can use Helm email through the existing `helm-email`
+  capability when a task calls for human email.
 
 ### 6c — Write `identity.md`
 
@@ -241,8 +217,10 @@ _Hired: {YYYY-MM-DD}._
 ```
 
 Principles is the section to hold the line on — write 3–5 real opinions or
-none at all. Don't pad. (The old "Working philosophy" section is replaced
-by Principles, which sets a higher bar.)
+none at all. Don't pad. Use the user's requested background and your best
+role archetype judgment; background research can refine later, but the agent
+must have a credible identity now. (The old "Working philosophy" section is
+replaced by Principles, which sets a higher bar.)
 
 ### 6d — Write `role.md`
 
@@ -281,7 +259,7 @@ Cap: ~600 tokens. Sections:
 {What "good" looks like. Reference-class comparisons where possible.}
 
 ## Anti-patterns
-{Specific failure modes this agent should recognize in itself and reject. Drawn directly from Subagent B's failure-modes research.}
+{Specific failure modes this agent should recognize in itself and reject. Use the user's concerns and role-archetype defaults; background research can refine later.}
 
 ## Definition of done
 {What signals completion of a unit of work.}
@@ -298,13 +276,15 @@ _Set: {YYYY-MM-DD}._
 
 ### 6e — Write `knowledge.md`
 
-Cap: ~1500–2500 tokens. **Structure: 8 fixed sections.** Each section
+Starter cap: ~500–900 tokens. Enriched cap: ~1500–2500 tokens after the
+background job completes. **Structure: 8 fixed sections.** Each section
 contains dated bullet entries — mental models, frameworks, patterns, or
 references with one line of "why it matters here."
 
-Pull content from all four research subagents (6b). Don't pad — if a
-section has nothing useful at hire time, write a one-line placeholder and
-let it grow.
+Do **not** wait for research before writing this file. Pull from the hire
+sheet, any user-provided sources, and role archetype knowledge. If a section
+has nothing useful at hire time, write a one-line placeholder and let the
+background enrichment job fill it.
 
 ```markdown
 # Knowledge
@@ -312,28 +292,31 @@ let it grow.
 _(What you know — domain expertise, mental models, frameworks, patterns.)_
 
 ## Domain map
-{Brief landscape of the work. Sub-specialties, schools of thought. 3–6 dated bullets. Drawn from Subagent A.}
+{Brief landscape of the work. Sub-specialties, schools of thought. 2–4 dated starter bullets from the hire sheet, user-provided sources, and role archetype defaults.}
 
 ## Best practices
-{Concrete, opinionated practices from research + interview. Each cites why it matters and when it applies.}
+{Concrete, opinionated practices from the interview and role archetype defaults. Each cites why it matters and when it applies.}
 
 ## Common failure modes
-{3–5 specific ways this work goes wrong, with diagnostic signals for each. Drawn from Subagent B.}
+{2–4 specific ways this work goes wrong, with diagnostic signals for each. Use the user's concerns and strong role defaults.}
 
 ## Decision heuristics
-{"When X, prefer Y because Z." Practitioner shortcuts that compress experience. Drawn from Subagent C.}
+{"When X, prefer Y because Z." Starter practitioner shortcuts that compress experience.}
 
 ## Tools & frameworks
-{What to reach for, when, and why. Include alternatives and tradeoffs. Drawn from Subagent C.}
+{What to reach for, when, and why. Include known user-provided tools first; mark unknowns for enrichment.}
 
 ## Reference material
 {Links, docs, exemplars, prior art the agent should treat as canonical. Curated, not exhaustive.}
 
 ## Contested territory
-{Where thoughtful practitioners disagree. Note the user's stated position from the interview, if given. Drawn from Subagent D.}
+{Where thoughtful practitioners may disagree. Note the user's stated position from the interview, if given; otherwise mark for enrichment.}
 
 ## Open questions
 {Things the agent should investigate further once operational. Seeds for skill spawning and memory.}
+
+## Enrichment status
+{One dated bullet stating that background knowledge-base enrichment is underway and will update this file automatically when complete.}
 ```
 
 Each entry: ~50–150 tokens, dated `(YYYY-MM-DD)` so future curation can age
@@ -414,8 +397,20 @@ _Set: {YYYY-MM-DD}. Re-affirm every 14 days._
 _Updated: {YYYY-MM-DD}._
 ```
 
-Leave `threads.md`, `notes.md`, and `dailys.md` as scaffolded by `academy
-create` — these populate over time, not at hire.
+Update `threads.md` with one active onboarding thread:
+
+```markdown
+## Active
+
+- **Knowledge-base enrichment** — `active`
+  - `created`: {YYYY-MM-DD}
+  - `last_touched`: {YYYY-MM-DD}
+  - `next`: Background research will deepen `knowledge.md` after the agent is already usable.
+  - `done_when`: `knowledge.md` has domain map, failure modes, tools, heuristics, references, contested territory, and open questions updated from research.
+```
+
+Leave `notes.md` and `dailys.md` as scaffolded by `academy create` except for
+the hiring memo in Step 7.
 
 ### 6h — Update `agent.yaml`
 
@@ -445,12 +440,14 @@ If on-demand, skip — the user invokes manually with `academy run {slug}`.
 
 ## Step 7 — Hiring memo + completion report
 
+Present this completion report **before** kicking off research. The user
+should leave the hire flow knowing the agent exists and can be used now.
+
 First, write a **hiring memo** — 3–5 sentences capturing what you learned
 during the interview that shaped the result. Surprises, the user's
-distinctive opinions, calls you made on their behalf, where research and
-the user disagreed and how you resolved it. This is what future-{Name} (or
-the next person reading the hire) needs to know about *why* they look the
-way they do.
+distinctive opinions, and calls you made on their behalf. This is what
+future-{Name} (or the next person reading the hire) needs to know about
+*why* they look the way they do.
 
 Seed the memo into the top of `~/.academy/agents/{slug}/notes.md` as a
 dated entry titled `## Hiring memo — {YYYY-MM-DD}`. `notes.md` is the
@@ -458,8 +455,8 @@ right home: it's already scaffolded, it's a staging area meant for
 curation, and the memo is exactly the kind of context that may graduate
 into `knowledge.md` over time.
 
-Then summarize the hire as the agent showing up for work, not a config
-dump:
+Then summarize the hire as the agent showing up for work, not a config dump.
+Do not describe research as complete:
 
 > **{Name} is hired and ready.**
 >
@@ -469,7 +466,7 @@ dump:
 >
 > **What I learned hiring them:** {The hiring memo, condensed to 1–2 sentences.}
 >
-> **Domain expertise:** Initial knowledge profile written ({brief list of domain areas covered}).
+> **Knowledge base:** Starter knowledge written. Background enrichment is underway; `{agent_dir}/knowledge.md` will be enriched automatically when it finishes.
 >
 > **Scheduled work:** {Task-specific skill name if one was created, OR "No task-specific skill needed."}
 >
@@ -480,6 +477,33 @@ dump:
 > academy run {slug}
 > ```
 
+After this summary has been shown, proceed to Step 8. Do not wait for Step 8
+to complete before saying the agent is ready.
+
+---
+
+## Step 8 — Start background knowledge enrichment
+
+Kick off knowledge enrichment only after the completion report. Prefer a
+one-off Helm task so the hire flow does not block on research:
+
+```bash
+helm-tasks schedule \
+  --cwd ~/.academy/agents/{slug} \
+  --id {slug}-knowledge-enrichment \
+  --in 1m \
+  --command academy --replace \
+  --retry-max 2 --retry-backoff exponential --retry-delay-sec 120 \
+  -- run {slug} -- -p "Enrich knowledge.md for this newly hired agent. Research the role's domain map, best practices, common failure modes, decision heuristics, tools/frameworks, reference material, contested territory, and open questions. Update only knowledge.md and the knowledge-base enrichment thread in threads.md. Preserve the user's specific hiring instructions over generic web guidance. When complete, mark the thread done."
+```
+
+If Step 5 included a project working directory, add `--process-cwd "{project path
+from Step 5}"` so research can inspect the target project context. If Helm is
+unavailable or scheduling fails, leave the agent ready, report the warning, and
+include the exact command the user can rerun. Do not ask the user to configure
+email; Helm email is already the platform capability agents use when email is
+needed.
+
 ---
 
 ## Phase 0 constraints (read this before starting)
@@ -488,6 +512,9 @@ dump:
   skill when the recurring job needs a procedure. Universal platform skills
   and internal tool skills belong to Academy/Helm/Subspace, not to each
   individual hire.
+- **No email setup.** Do not ask for user email, AgentMail keys, inbox
+  provisioning, or Academy-specific email configuration. Agents use Helm email through
+  `helm-email` when a task explicitly needs human email.
 - **Boot budget: ~5–6k tokens.** Measure as you go. If `knowledge.md` starts
   pushing 3k tokens alone, consolidate it. Defer skill extraction until a
   real recurring procedure exists, unless 6f applies.
