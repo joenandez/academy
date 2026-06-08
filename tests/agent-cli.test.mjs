@@ -213,7 +213,14 @@ test('hook config keeps Stop memory sync and no startup context injection hooks'
   const sessionStart = config.hooks.SessionStart;
   const stop = config.hooks.Stop;
 
-  assert.equal(sessionStart, undefined);
+  assert.equal(sessionStart.length, 1);
+  assert.equal(sessionStart[0].matcher, '*');
+  assert.deepEqual(sessionStart[0].hooks, [
+    {
+      type: 'command',
+      command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/register_session.mjs',
+    },
+  ]);
   assert.equal(stop.length, 1);
   assert.equal(stop[0].matcher, '*');
   assert.deepEqual(stop[0].hooks, [
@@ -225,6 +232,7 @@ test('hook config keeps Stop memory sync and no startup context injection hooks'
 
   const serialized = JSON.stringify(config);
   assert.doesNotMatch(serialized, /inject_surface|inject_section|observe_turn|\.ops/);
+  assert.doesNotMatch(serialized, /additionalContext|hookSpecificOutput/);
 });
 
 test('memory sync hook exists as a v3 node hook, not a legacy observe hook', () => {
