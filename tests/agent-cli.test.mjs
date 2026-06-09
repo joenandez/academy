@@ -183,18 +183,50 @@ test('plugin manifest declares Academy and points at the v3 hook config', () => 
   assert.equal(manifest.hooks, './hooks/hooks.json');
 });
 
-test('hire skill reports readiness before starting knowledge enrichment', () => {
+test('hire skill reports readiness without waiting for knowledge enrichment', () => {
   const skill = readFileSync(join(repoRoot, 'skills', 'hire', 'SKILL.md'), 'utf8');
   const summaryIndex = skill.indexOf('## Step 7 — Hiring memo + completion report');
   const enrichmentIndex = skill.indexOf('## Step 8 — Start background knowledge enrichment');
 
-  assert.notEqual(summaryIndex, -1);
+  const draftIndex = skill.indexOf('## Step 7 — Hiring memo + completion report draft');
+  assert.equal(summaryIndex, draftIndex);
+  assert.notEqual(draftIndex, -1);
   assert.notEqual(enrichmentIndex, -1);
-  assert.ok(summaryIndex < enrichmentIndex);
+  assert.ok(draftIndex < enrichmentIndex);
   assert.match(skill, /Do \*\*not\*\* run\s+research in Step 6/);
-  assert.match(skill, /Present this completion report \*\*before\*\* kicking off research/);
+  assert.match(skill, /Prepare the completion report now, but present it after Step 8 schedules/);
+  assert.match(skill, /Do not\s+wait for research to complete before saying the agent is ready/);
   assert.match(skill, /Starter knowledge written\. Background enrichment is underway/);
+  assert.match(skill, /research phase has started[\s\S]*exact knowledge areas it will deepen/);
   assert.match(skill, /helm-tasks schedule[\s\S]*--id \{slug\}-knowledge-enrichment/);
+});
+
+test('hire skill is specialist-first and allows users to skip clarification', () => {
+  const skill = readFileSync(join(repoRoot, 'skills', 'hire', 'SKILL.md'), 'utf8');
+
+  assert.match(skill, /Subspace Specialist/);
+  assert.match(skill, /Tell me what kind of specialist you wish you had available/);
+  assert.match(skill, /specific companies, products, people, or skills/);
+  assert.match(skill, /Slack,[\s\S]*Superhuman,[\s\S]*Notion/);
+  assert.match(skill, /2–3 plausible specialist hypotheses[\s\S]*grounded in the user's actual dump/);
+  assert.match(skill, /Do not invent disconnected options/);
+  assert.match(skill, /Capability stack/);
+  assert.match(skill, /say\s+`skip`/);
+  assert.match(skill, /launch the agent any time, from any workspace/);
+  assert.match(skill, /They remember[\s\S]*work that happened anywhere they worked/);
+  assert.match(skill, /specific Skills and MCP servers/);
+  assert.match(skill, /on demand[\s\S]*one-off future task[\s\S]*recurring work/);
+  assert.match(skill, /ask the agent later[\s\S]*review the onboarding funnel every Monday at 9am/);
+});
+
+test('hire skill asks for scheduled Claude Code permission mode', () => {
+  const skill = readFileSync(join(repoRoot, 'skills', 'hire', 'SKILL.md'), 'utf8');
+
+  assert.match(skill, /All Helm-launched Claude Code tasks must have an explicit permission mode/);
+  assert.match(skill, /Auto mode \(recommended\)[\s\S]*`--permission-mode auto`/);
+  assert.match(skill, /Dangerously skip permissions[\s\S]*`--dangerously-skip-permissions`/);
+  assert.match(skill, /-- run \{slug\} -- \{scheduled permission args\} -p "Run today's work session\."/);
+  assert.match(skill, /-- run \{slug\} -- \{scheduled permission args\} -p "Enrich knowledge\.md/);
 });
 
 test('hire skill does not configure email during hire', () => {
@@ -404,6 +436,8 @@ printf '%s\\n' "$@" >> "${logPath}"
   assert.match(helmArgs, /^academy$/m);
   assert.match(helmArgs, /^run$/m);
   assert.match(helmArgs, /^kai$/m);
+  assert.match(helmArgs, /^--permission-mode$/m);
+  assert.match(helmArgs, /^auto$/m);
   assert.match(helmArgs, /nightly-consolidation skill/);
 });
 

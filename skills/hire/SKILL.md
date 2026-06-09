@@ -1,16 +1,18 @@
 ---
 name: hire
-description: Hire an Academy v3 agent through a task-first conversation. Creates a runnable agent before research completes, writes starter boot surfaces, schedules background knowledge enrichment, and optionally registers a scheduled work session. Boots context budget ~5–6k tokens after enrichment.
+description: Hire an Academy v3 agent through a specialist-first conversation. Helps the user crystallize the exact expert they want, creates a runnable agent before research completes, writes starter boot surfaces, schedules background knowledge enrichment, and optionally registers future or recurring work. Boots context budget ~5–6k tokens after enrichment.
 disable-model-invocation: true
 ---
 
 # Academy v3 — Hire flow
 
-Hire an autonomous Academy v3 agent. The user describes the work they need
-done. You synthesize a persona and write the **eight boot files** that will be
-loaded into every session via SessionStart hooks. The agent must be runnable
-before domain research completes; research is an automatic enrichment step
-after the hiring summary.
+Hire an autonomous Academy v3 agent as a **Subspace Specialist**. The user
+usually has a rough sense of the expert they want, but may not yet have the
+language for the exact specialty, judgment style, and capability stack. Your
+job is to help crystallize the right specialist, then write the **eight boot
+files** that will be loaded into every session via SessionStart hooks. The
+agent must be runnable before domain research completes; research is an
+automatic enrichment step after the hiring summary.
 
 | File | Contains | Soft cap |
 | --- | --- | --- |
@@ -31,6 +33,12 @@ deepen without blocking first use.
 
 ## Core method
 
+**Specialist-first.** Treat the hire as expert design, not task scheduling.
+Infer what the specialist should be unusually good at, how they should make
+judgment calls, what mediocre work they should reject, and which skills/tools
+would make them more capable. Scheduling is an operating mode, not the center
+of the product.
+
 **Draft-first, falsify-second.** Commit to a specific strawman with strong
 opinions, then interrogate it. Every question to the user must satisfy:
 *"I'm asking this because I currently believe X, and if the user says Y
@@ -42,12 +50,15 @@ digs into the surprise. You're running Bayesian inference, not reading from
 a list.
 
 **Stop questioning when** you can write each section with confidence, the
-user has skipped two consecutive questions, or the user says "ship it."
+user has skipped two consecutive questions, or the user says "ship it." Make
+skipping explicit: after asking a sharp question, remind the user they can say
+`skip` and you'll proceed with your current best inference.
 
 **Anti-patterns to reject in yourself:**
 
 - Generic discovery questions ("what are your goals?", "any other requirements?")
 - Compound questions wearing a trenchcoat ("what's X and Y and Z?")
+- Presenting specialist options that are not anchored in the user's own dump
 - Blocking first use on information research subagents could find — write the starter agent first and let background enrichment handle it
 - Padding `identity.md` / `role.md` sections you can't defend with conviction — prefer a thinner section over filler
 - Sanding off the user's opinions into corporate prose during synthesis
@@ -61,14 +72,18 @@ user has skipped two consecutive questions, or the user says "ship it."
 Deliver this naturally (adapt tone; don't read verbatim):
 
 > **Welcome.** You're about to hire an Academy agent. Each agent runs on top
-> of Subspace's agent platform — your work happens in a portable plugin at
-> `~/.academy/agents/<name>/`, and every session boots with eight tight
-> context files that we'll write together: identity, role, knowledge, goals,
-> priorities, threads, notes, and dailys.
+> of Subspace's agent platform. Think of this as hiring a specialist, not
+> starting a generic chat: someone with a specific area of expertise, a point
+> of view, a memory, and a way of working.
 >
-> You set the direction. The agent self-improves over time — notes graduate
-> to knowledge, knowledge gets curated, and repeatable work can become
-> skills when it is real enough to deserve one.
+> You can launch the agent any time, from any workspace. They remember the
+> work that happened anywhere they worked. Each specialist has their own
+> identity, knowledge, goals, priorities, and notes; they process memory every
+> night; and they can use specific Skills and MCP servers to do their job
+> effectively.
+>
+> You set the direction. You can run the specialist on demand, ask them to do
+> something in the future, or give them recurring work.
 >
 > Let's get started.
 
@@ -78,46 +93,84 @@ Then proceed to Step 1.
 
 ## Step 1 — The dump
 
-One open prompt. Task-first.
+One open prompt. Specialist-first.
 
-> "**Tell me what you need done.** Describe the work — a recurring review,
-> an ongoing responsibility, a kind of analysis. Then tell me what kind of
-> person should do it: background, companies, thinking style. A few
-> sentences is plenty."
+> "**Tell me what kind of specialist you wish you had available.** What should
+> they be unusually good at? What work should they make easier, clearer, or
+> higher quality? If there are specific companies, products, people, or skills
+> you want them modeled after — for example, a design lead shaped by Slack,
+> Superhuman, and Notion — include those too. A rough version is fine; I'll
+> help sharpen it."
 
 Wait for response.
 
 ---
 
-## Step 2 — Hire sheet
+## Step 2 — Specialist hypotheses + hire sheet
 
-Reflect back a structured hire sheet. Fill gaps with archetype defaults
-rather than interrogating.
+First, reflect back **2–3 plausible specialist hypotheses** that are all
+grounded in the user's actual dump. Do not invent disconnected options. Each
+hypothesis should represent a different interpretation of the same user need:
+for example, an operator vs. an advisor vs. a builder vs. a researcher, but
+only when those shapes genuinely follow from what the user said.
+
+For each hypothesis, include:
+
+- **Specialist shape:** The role archetype in plain English.
+- **Why it fits:** The exact phrase or need from the user's dump that supports it.
+- **What would change:** How the boot files, first assignment, skills, or schedule
+  would differ if this hypothesis wins.
+
+Then state your current recommendation:
+
+> "I think {hypothesis} is the best fit because {reason}. If that's wrong,
+> say so; if you want to move quickly, say `ship it` or `skip` and I'll use
+> this version."
+
+After the hypothesis pass, reflect back a structured hire sheet. Fill gaps
+with archetype defaults rather than interrogating.
 
 | Field | Source |
 | --- | --- |
 | Role title | Inferred from work description |
-| Background | User-provided or archetype default |
+| Specialist shape | Operator, advisor, researcher, builder, coach/editor, or a tighter role-specific label |
+| Core expertise | What this specialist should be unusually good at |
+| Judgment style | How they make tradeoffs; what they should be opinionated about |
+| Reference background | Specific companies, products, teams, people, schools of practice, or archetype defaults |
 | Objective | Direct restatement of the primary work need |
 | Responsibilities | 3–5 bullets decomposed from the work |
-| Schedule | Only if user described recurring work |
+| Capability stack | Known tools, useful skills, possible future MCP servers; mark unknowns for enrichment |
+| Operating mode | On-demand, one future task, recurring work, or a mix |
+| Scheduled task permissions | Claude Code permission mode for Helm-launched tasks |
 | Data sources | URLs/APIs/files mentioned, else discover-over-time |
 
-Present the hire sheet. Schedule is **optional** — omit the field entirely
-for on-demand agents.
+Present the hire sheet. Operating mode is about how the specialist works:
+on-demand is the default; future and recurring tasks are optional.
+
+If the specialist would benefit from existing installable skills, do a quick
+capability scout before generation: derive 1–3 focused queries from the hire
+sheet and run `npx skills find "{query}"` or use the installed `find-skills`
+workflow. Only recommend skills that are clearly relevant and reputable. Do
+not install external skills without explicit user confirmation. If no strong
+skill match appears quickly, write "No external skill added at hire time" and
+leave a capability-stack open question for enrichment.
 
 Then apply the **draft-first/falsification protocol** (see Core method):
 instead of asking "anything to add?", identify the 1–3 fields you're least
 confident in and ask one sharp question per field that would change the
-sheet if the user disagreed. Templates — adapt to the actual hire:
+sheet if the user disagreed. Ask about judgment and expertise before
+configuration. Templates — adapt to the actual hire:
 
-- "I wrote responsibility 3 as {X}. If you'd swap it for {Y}, the cadence
-  changes — push back if {X} is wrong."
-- "I've assumed weekly cadence. If it should be daily, that changes how
-  `knowledge.md` sections should chunk."
+- "I made this specialist stubborn about {X}. If you want them to optimize
+  for {Y} instead, I'll change their principles and quality bar."
+- "I shaped them as a {builder/advisor/researcher}. If you really need a
+  {different shape}, I'll change the role loop and first assignment."
+- "I assumed they should reject {failure mode}. If that's too strict, I'll
+  soften the guardrails."
 
 Skip questions you can't complete the "if user says Y, draft changes by Z"
-sentence for. Stop when the sheet is confident or the user signals done.
+sentence for. Stop when the sheet is confident, the user says `skip`, or the
+user signals done.
 
 ---
 
@@ -134,22 +187,60 @@ Wait for the user to pick.
 
 ---
 
-## Step 4 — First assignment (optional)
+## Step 4 — First assignment + operating mode
 
 Propose what the agent will produce in their first work session. One
-sentence is enough. Wait for confirmation. Skip this step if no schedule
-was defined and the user wants to drive interactively.
+sentence is enough. Then use this as a teaching moment:
+
+> "You can run {Name} on demand any time with `academy run {slug}`. You can
+> also ask me, or ask the agent later, to set up proactive work in natural
+> language — like `review the onboarding funnel every Monday at 9am`, `check
+> the release notes tomorrow afternoon`, or `start the first design audit next
+> Friday morning`. I'll set it up for you when you want. For now I recommend
+> {mode} because {reason}. Say `skip` if you want to keep them on-demand."
+
+Wait for confirmation. If the user wants on-demand only, continue without a
+future or recurring work session. If the user wants the first assignment in
+the future, capture the natural-language time. If the user wants recurring
+work, capture the cadence and working directory. When the user chooses future
+or recurring work, offer to set it up now rather than making them translate
+the request into cron or CLI syntax.
 
 ---
 
-## Step 5 — Schedule confirmation (only if Step 2 included a schedule)
+## Step 5 — Operating schedule and permission confirmation
 
-Convert the user's natural-language schedule to a cron expression. Confirm:
+All Helm-launched Claude Code tasks must have an explicit permission mode
+because scheduled jobs run headless and cannot answer approval prompts.
+
+Ask the user which permission level scheduled tasks should use. Recommend
+`auto` unless the user needs stricter review or explicitly accepts full bypass.
+Translate the answer into one of these Claude Code passthrough arg sets:
+
+| User-facing choice | Passthrough args |
+| --- | --- |
+| Default | `--permission-mode default` |
+| Accept edits | `--permission-mode acceptEdits` |
+| Plan mode | `--permission-mode plan` |
+| Auto mode (recommended) | `--permission-mode auto` |
+| Dangerously skip permissions | `--dangerously-skip-permissions` |
+
+Persist the selected passthrough args as `{scheduled permission args}` for every
+`helm-tasks schedule` command below, including one-off knowledge enrichment.
+
+If Step 4 included a one-off future task, convert the user's natural language
+time into an absolute scheduled time or a clear `--in` duration for
+`helm-tasks schedule`.
+
+If Step 4 included recurring work, convert the user's natural-language schedule
+to a cron expression. Confirm:
 
 - Frequency + time → cron string
 - Project working directory → absolute path
 
-If the agent is on-demand, skip.
+If the specialist is on-demand, skip only the cron/project confirmation; still
+confirm scheduled task permissions because Step 8 schedules background
+knowledge enrichment.
 
 ---
 
@@ -231,6 +322,7 @@ Cap: ~600 tokens. Sections:
 
 **Title:** {Role title from hire sheet}
 **Hired by:** {User's name if known, else "the user"}
+**Specialist shape:** {The chosen specialist hypothesis}
 
 ## Objective
 {Direct one-sentence statement of what this agent is hired to deliver. (Concrete output — contrast with Mission in identity.md, which is the north star.)}
@@ -242,7 +334,7 @@ Cap: ~600 tokens. Sections:
 - _(3–5 total)_
 
 ## The loop
-{Operating cadence — phases in order, with trigger and output of each. If not cyclical, replace with "Operating mode."}
+{Operating cadence — phases in order, with trigger and output of each. If not cyclical, replace with "Operating mode." Include on-demand, future task, or recurring schedule behavior from Step 4.}
 
 ## Guardrails
 {What this agent will not do, even if asked. Red lines. Stop-and-escalate triggers.}
@@ -255,6 +347,9 @@ Cap: ~600 tokens. Sections:
 ## Deliverables
 {Named artifacts produced and maintained, with update cadence. Format, who it's for.}
 
+## Capability stack
+{Known tools, installed/recommended skills, likely future MCP servers, and what each capability is for. If no external skill was added at hire time, say so plainly.}
+
 ## Quality bar
 {What "good" looks like. Reference-class comparisons where possible.}
 
@@ -265,7 +360,7 @@ Cap: ~600 tokens. Sections:
 {What signals completion of a unit of work.}
 
 ## Cadence
-{Schedule if recurring (e.g., "Weekdays at 9am via Helm"), else "On-demand — invoked via `academy run {slug}`".}
+{On-demand, one-off future task, recurring schedule, or mixed mode. Include exact schedule if configured.}
 
 ## Data sources
 {Listed URLs/APIs/files, or "Discovers over time."}
@@ -417,7 +512,25 @@ the hiring memo in Step 7.
 Edit `~/.academy/agents/{slug}/agent.yaml`. Replace the empty `role:` and
 `objective:` strings with the actual values. Leave the surface list alone.
 
-### 6i — Register Helm work session (only if Step 5 produced a schedule)
+### 6i — Register Helm work sessions (only if Step 4 selected future or recurring work)
+
+For a one-off future first assignment, schedule a single Helm task:
+
+```bash
+helm-tasks schedule \
+  --cwd ~/.academy/agents/{slug} \
+  --id {slug}-first-assignment \
+  --at "{absolute time from Step 5}" \
+  --process-cwd "{project path from Step 5, if any}" \
+  --command academy --replace \
+  --retry-max 2 --retry-backoff exponential --retry-delay-sec 120 \
+  -- run {slug} -- {scheduled permission args} -p "{first assignment prompt}"
+```
+
+Use `--in "{duration}"` instead of `--at` only when the user gave a relative
+time like "in 30 minutes." Keep the prompt short and role-specific.
+
+For recurring work, register the recurring work session:
 
 ```bash
 helm-tasks schedule \
@@ -427,21 +540,24 @@ helm-tasks schedule \
   --process-cwd "{project path from Step 5}" \
   --command academy --replace \
   --retry-max 2 --retry-backoff exponential --retry-delay-sec 120 \
-  -- run {slug} -- -p "Run today's work session."
+  -- run {slug} -- {scheduled permission args} -p "Run today's work session."
 ```
 
 If 6f created a task-specific skill, make the prompt name the scheduled
 responsibility and tell the agent to use that skill. If no skill was
 created, keep the prompt short and role-specific.
 
-If on-demand, skip — the user invokes manually with `academy run {slug}`.
+If on-demand, skip work-session scheduling — the user invokes manually with
+`academy run {slug}`.
 
 ---
 
-## Step 7 — Hiring memo + completion report
+## Step 7 — Hiring memo + completion report draft
 
-Present this completion report **before** kicking off research. The user
-should leave the hire flow knowing the agent exists and can be used now.
+Prepare the completion report now, but present it after Step 8 schedules
+background enrichment so the final note can truthfully say the research phase
+has started. The user should leave the hire flow knowing the agent exists and
+can be used immediately, even though deeper research may take 10–15 minutes.
 
 First, write a **hiring memo** — 3–5 sentences capturing what you learned
 during the interview that shaped the result. Surprises, the user's
@@ -455,8 +571,8 @@ right home: it's already scaffolded, it's a staging area meant for
 curation, and the memo is exactly the kind of context that may graduate
 into `knowledge.md` over time.
 
-Then summarize the hire as the agent showing up for work, not a config dump.
-Do not describe research as complete:
+Then draft the hire summary as the agent showing up for work, not a config
+dump. Do not describe research as complete:
 
 > **{Name} is hired and ready.**
 >
@@ -468,23 +584,31 @@ Do not describe research as complete:
 >
 > **Knowledge base:** Starter knowledge written. Background enrichment is underway; `{agent_dir}/knowledge.md` will be enriched automatically when it finishes.
 >
-> **Scheduled work:** {Task-specific skill name if one was created, OR "No task-specific skill needed."}
+> **Capabilities:** {External skills installed or recommended, plus task-specific skill name if one was created. If none, "No external skill added at hire time."}
 >
-> **Schedule:** {Cron description + first run, OR "On-demand."}
+> **Operating mode:** {On-demand, one-off future task, recurring schedule, or mixed mode. Include first run if scheduled.}
 >
 > **Meet your agent:**
 > ```bash
 > academy run {slug}
 > ```
+>
+> **Research phase:** I've started background research now. It will build
+> {Name}'s knowledge base around {specific domains, reference companies,
+> best practices, failure modes, tools/frameworks, contested territory, and
+> open questions from the hire}. You can use {Name} immediately; the deeper
+> knowledge update usually takes 10–15 minutes.
 
-After this summary has been shown, proceed to Step 8. Do not wait for Step 8
-to complete before saying the agent is ready.
+Do not show this report yet. Proceed immediately to Step 8, schedule the
+background enrichment task, then show this completion report with the research
+phase status updated to reflect whether scheduling succeeded or failed. Do not
+wait for research to complete before saying the agent is ready.
 
 ---
 
 ## Step 8 — Start background knowledge enrichment
 
-Kick off knowledge enrichment only after the completion report. Prefer a
+Kick off knowledge enrichment after drafting the completion report. Prefer a
 one-off Helm task so the hire flow does not block on research:
 
 ```bash
@@ -494,7 +618,7 @@ helm-tasks schedule \
   --in 1m \
   --command academy --replace \
   --retry-max 2 --retry-backoff exponential --retry-delay-sec 120 \
-  -- run {slug} -- -p "Enrich knowledge.md for this newly hired agent. Research the role's domain map, best practices, common failure modes, decision heuristics, tools/frameworks, reference material, contested territory, and open questions. Update only knowledge.md and the knowledge-base enrichment thread in threads.md. Preserve the user's specific hiring instructions over generic web guidance. When complete, mark the thread done."
+  -- run {slug} -- {scheduled permission args} -p "Enrich knowledge.md for this newly hired agent. Research the role's domain map, best practices, common failure modes, decision heuristics, tools/frameworks, reference material, contested territory, and open questions. Update only knowledge.md and the knowledge-base enrichment thread in threads.md. Preserve the user's specific hiring instructions over generic web guidance. When complete, mark the thread done."
 ```
 
 If Step 5 included a project working directory, add `--process-cwd "{project path
@@ -503,6 +627,12 @@ unavailable or scheduling fails, leave the agent ready, report the warning, and
 include the exact command the user can rerun. Do not ask the user to configure
 email; Helm email is already the platform capability agents use when email is
 needed.
+
+After the schedule command succeeds or fails, present the Step 7 completion
+report. If scheduling succeeded, the final research phase line should say the
+research phase has started and name the exact knowledge areas it will deepen.
+If scheduling failed, say the specialist is still ready now, explain that
+knowledge enrichment did not start automatically, and include the rerun command.
 
 ---
 

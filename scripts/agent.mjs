@@ -51,6 +51,7 @@ const NAME_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const SURFACES = ['identity', 'role', 'knowledge', 'goals', 'priorities', 'threads', 'notes', 'dailys'];
 const UNIVERSAL_SKILLS = ['check-in', 'self-update', 'nightly-consolidation'];
 const NIGHTLY_JOB_CRON = '0 22 * * *';
+const SCHEDULED_CLAUDE_PERMISSION_ARGS = ['--permission-mode', 'auto'];
 const ACADEMY_SYSTEM_PROMPT = 'academy-system-prompt.md';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -585,7 +586,7 @@ function registerNightlyConsolidationTask(dir, name) {
     '--tags', 'academy,nightly,consolidation',
     '--timeout-sec', '3600',
     '--',
-    'run', name, '--', '-p', prompt,
+    'run', name, '--', ...SCHEDULED_CLAUDE_PERMISSION_ARGS, '-p', prompt,
   ];
 
   const result = spawnSync('helm-tasks', args, {
