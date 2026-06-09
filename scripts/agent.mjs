@@ -11,6 +11,7 @@
  *   academy hire              Interactive hire flow (launches Claude Code with hire skill)
  *   academy run <name>        Launch Claude Code against current project
  *   academy list              List all agents
+ *   academy inspect <name>    Inspect one agent
  *   academy clean <name>      Clear transient agent state (notes/threads — not destructive)
  *   academy destroy <name>    Remove an agent (--force required)
  *   academy root              Print Academy package root
@@ -65,15 +66,20 @@ function parseArgs(argv) {
     case 'create':  return { command, name: rest[0] };
     case 'hire':    return { command };
     case 'run':     return { command, name: rest[0], passthrough: extractPassthrough(rest.slice(1)) };
-    case 'list':    return { command };
+    case 'list':    return { command, json: hasFlag(rest, '--json') };
+    case 'inspect': return { command, name: rest.find((arg) => arg !== '--json'), json: hasFlag(rest, '--json') };
     case 'clean':   return { command, name: rest[0] };
     case 'destroy': return { command, name: rest[0], force: rest.includes('--force') };
-    case 'root':    return { command };
+    case 'root':    return { command, json: hasFlag(rest, '--json') };
     case 'notes':   return parseNotesArgs(rest);
     default:
       console.error(`Unknown command: ${command}`);
       return { command: 'help', exitCode: 1 };
   }
+}
+
+function hasFlag(args, flag) {
+  return args.includes(flag);
 }
 
 function extractPassthrough(rest) {
@@ -128,6 +134,7 @@ Commands:
   hire                    Interactive hire flow — produces 8 boot files via Claude Code
   run <name> [-- ...]     Launch Claude Code against current project (plugin mode)
   list                    List all agents
+  inspect <name>          Inspect one agent
   clean <name>            Truncate transient surfaces (notes.md, threads.md)
   destroy <name> --force  Remove an agent and all its files
   root                    Print Academy package root
@@ -161,6 +168,15 @@ function validateName(name) {
 
 function agentDir(name) {
   return join(AGENTS_ROOT, name);
+}
+
+function printJson(value, stream = process.stdout) {
+  stream.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function exitJsonError(code, message, fields = {}) {
+  printJson({ error: { code, message, ...fields } }, process.stderr);
+  process.exit(1);
 }
 
 function isSymlink(path) {
@@ -698,13 +714,7 @@ function runAgent(name, passthrough) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function listAgents() {
-  if (!existsSync(AGENTS_ROOT)) {
-    console.log('(no agents yet — try `academy hire` or `academy create <name>`)');
-    return;
-  }
-  const entries = readdirSync(AGENTS_ROOT)
-    .filter((e) => statSync(join(AGENTS_ROOT, e)).isDirectory())
-    .sort();
+  const entries = agentNames();
   if (entries.length === 0) {
     console.log('(no agents yet — try `academy hire` or `academy create <name>`)');
     return;
@@ -714,6 +724,57 @@ function listAgents() {
     const role = yaml.role || '(no role set)';
     console.log(`  ${name.padEnd(20)} ${role}`);
   }
+}
+
+function listAgentsJson() {
+  printJson({ agents: agentNames().map((name) => agentRecord(name)) });
+}
+
+function agentNames() {
+  if (!existsSync(AGENTS_ROOT)) return [];
+  return readdirSync(AGENTS_ROOT)
+    .filter((e) => statSync(join(AGENTS_ROOT, e)).isDirectory())
+    .sort();
+}
+
+function agentRecord(name, { includeSurfaces = false } = {}) {
+  const dir = agentDir(name);
+  const yaml = readAgentYaml(dir);
+  const record = {
+    name,
+    dir: resolve(dir),
+    displayName: yaml.displayName || yaml.display_name || yaml.name || name,
+    runtimeProvider: 'claude_code',
+  };
+  if (yaml.role) record.role = yaml.role;
+  if (includeSurfaces) record.surfaces = surfacePresence(dir);
+  return record;
+}
+
+function surfacePresence(dir) {
+  return Object.fromEntries(SURFACES.map((surface) => [surface, existsSync(join(dir, `${surface}.md`))]));
+}
+
+function inspectAgent(name, json) {
+  validateName(name);
+  const dir = agentDir(name);
+  if (!existsSync(dir)) {
+    const message = `Agent "${name}" not found at ${dir}`;
+    if (json) exitJsonError('agent_not_found', message, { name });
+    console.error(message);
+    process.exit(1);
+  }
+
+  const record = agentRecord(name, { includeSurfaces: true });
+  if (json) {
+    printJson(record);
+    return;
+  }
+
+  console.log(`${record.name} (${record.runtimeProvider})`);
+  console.log(`  dir: ${record.dir}`);
+  console.log(`  displayName: ${record.displayName}`);
+  if (record.role) console.log(`  role: ${record.role}`);
 }
 
 function readAgentYaml(dir) {
@@ -862,7 +923,11 @@ function main() {
       runAgent(parsed.name, parsed.passthrough);
       break;
     case 'list':
-      listAgents();
+      if (parsed.json) listAgentsJson();
+      else listAgents();
+      break;
+    case 'inspect':
+      inspectAgent(parsed.name, parsed.json);
       break;
     case 'clean':
       cleanAgent(parsed.name);
@@ -871,7 +936,8 @@ function main() {
       destroyAgent(parsed.name, parsed.force);
       break;
     case 'root':
-      console.log(ACADEMY_ROOT);
+      if (parsed.json) printJson({ packageRoot: ACADEMY_ROOT, agentsRoot: resolve(AGENTS_ROOT) });
+      else console.log(ACADEMY_ROOT);
       break;
     case 'notes':
       if (parsed.action === 'add') notesAdd(parsed.name, parsed.text);

@@ -14,7 +14,18 @@ Portable AI agents on top of [Subspace's](https://github.com/codename/subspace) 
   commands (`create`, `list`, `clean`) work without them; the full agent
   lifecycle does not.
 
-**Clone and link**
+**Subspace-provisioned use**
+
+When Academy is bundled by Subspace, users do not need to clone this repository
+or run `npm link`. Subspace installs its trusted Academy entrypoint under its
+managed `$SUBSPACE_HOME/bin/academy` path and launches agents through that
+entrypoint.
+
+Use `academy root --json`, `academy list --json`, and
+`academy inspect <name> --json` for read-only machine contracts. Human output
+remains the default when `--json` is absent.
+
+**Clone and link for local development**
 
 ```bash
 git clone <repo-url> academy
@@ -23,7 +34,8 @@ npm link        # makes `academy` available globally (no deps to install)
 academy --help
 ```
 
-There is no build step and no `npm install` — `npm link` is all you need.
+There is no build step and no `npm install` — `npm link` is all you need for
+local development.
 
 **Verify it works**
 
@@ -84,12 +96,16 @@ academy create <name>      # scaffold an agent dir at ~/.academy/agents/<name>/
 academy hire               # interactive hire flow (launches Claude Code with the hire skill)
 academy run <name>         # launch Claude Code against the current project
 academy list               # list all agents
+academy list --json        # machine-readable agent summary records
+academy inspect <name>     # inspect one agent
+academy inspect <name> --json
 academy clean <name>       # truncate notes.md and threads.md
 academy destroy <name> --force
 academy root               # print the package root
+academy root --json        # machine-readable packageRoot + agentsRoot
 ```
 
-## Install (local dev)
+## Install (local dev only)
 
 ```bash
 cd ~/Dev/academy

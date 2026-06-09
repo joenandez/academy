@@ -39,6 +39,11 @@ function runCliExpectFail(args, options = {}) {
 
 const BULLET_RE = /^- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: /;
 
+function parseJson(text) {
+  assert.notEqual(text.trim(), '');
+  return JSON.parse(text);
+}
+
 test('notes add appends a bulleted note from an agent home', () => {
   const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
   const agentsRoot = join(root, 'agents');
@@ -54,6 +59,90 @@ test('notes add appends a bulleted note from an agent home', () => {
   const bullets = notes.split('\n').filter((l) => BULLET_RE.test(l));
   assert.equal(bullets.length, 1);
   assert.match(bullets[0], /User prefers short status updates before file edits/);
+});
+
+test('list --json returns sorted agent records and human list output remains unchanged', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+
+  const empty = parseJson(runCli(['list', '--json'], { env: { AGENTS_ROOT: agentsRoot } }));
+  assert.deepEqual(empty, { agents: [] });
+
+  runCli(['create', 'zara'], { env: { AGENTS_ROOT: agentsRoot } });
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  writeFileSync(join(agentsRoot, 'kai', 'agent.yaml'), 'role: Research lead\n');
+  writeFileSync(join(agentsRoot, 'zara', 'agent.yaml'), 'role: Ops partner\n');
+
+  const json = parseJson(runCli(['list', '--json'], { env: { AGENTS_ROOT: agentsRoot } }));
+  assert.deepEqual(json.agents.map((agent) => agent.name), ['kai', 'zara']);
+  assert.equal(json.agents[0].displayName, 'kai');
+  assert.equal(json.agents[0].role, 'Research lead');
+  assert.equal(json.agents[0].runtimeProvider, 'claude_code');
+  assert.equal(json.agents[0].dir, join(agentsRoot, 'kai'));
+
+  const human = runCli(['list'], { env: { AGENTS_ROOT: agentsRoot } });
+  assert.match(human, /kai\s+Research lead/);
+  assert.match(human, /zara\s+Ops partner/);
+  assert.doesNotMatch(human, /"agents"/);
+});
+
+test('root --json returns package and agents roots', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+
+  const json = parseJson(runCli(['root', '--json'], { env: { AGENTS_ROOT: agentsRoot } }));
+
+  assert.equal(json.packageRoot, repoRoot);
+  assert.equal(json.agentsRoot, agentsRoot);
+});
+
+test('inspect --json returns one agent record with surface presence booleans', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+  const agentDir = join(agentsRoot, 'kai');
+  writeFileSync(join(agentDir, 'agent.yaml'), 'role: Research lead\ndisplayName: Kai Research\n');
+  writeFileSync(join(agentDir, 'notes.md'), '# Notes\n');
+  writeFileSync(join(agentDir, 'dailys.md'), '# Dailys\n');
+  writeFileSync(join(agentDir, 'threads.md'), '# Threads\n');
+
+  const json = parseJson(runCli(['inspect', 'kai', '--json'], { env: { AGENTS_ROOT: agentsRoot } }));
+
+  assert.equal(json.name, 'kai');
+  assert.equal(json.dir, agentDir);
+  assert.equal(json.displayName, 'Kai Research');
+  assert.equal(json.role, 'Research lead');
+  assert.equal(json.runtimeProvider, 'claude_code');
+  assert.deepEqual(Object.keys(json.surfaces).sort(), [...surfaces].sort());
+  assert.deepEqual(json.surfaces, {
+    identity: true,
+    role: true,
+    knowledge: true,
+    goals: true,
+    priorities: true,
+    threads: true,
+    notes: true,
+    dailys: true,
+  });
+});
+
+test('inspect --json reports missing agents with a machine-readable error', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+
+  const { status, stdout, stderr } = runCliExpectFail(['inspect', 'missing', '--json'], {
+    env: { AGENTS_ROOT: agentsRoot },
+  });
+  const json = parseJson(stderr);
+
+  assert.notEqual(status, 0);
+  assert.equal(stdout, '');
+  assert.deepEqual(json.error, {
+    code: 'agent_not_found',
+    message: `Agent "missing" not found at ${join(agentsRoot, 'missing')}`,
+    name: 'missing',
+  });
+  assert.doesNotMatch(stderr, /Usage:/);
 });
 
 test('notes add by explicit agent name targets only that agent', () => {
