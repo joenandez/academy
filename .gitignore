@@ -6,3 +6,6 @@ node_modules/
 
 # Local CLI smoke artifacts
 tmp/
+
+# Transient one-off Helm scheduled-job prompt artifacts
+prompts/
