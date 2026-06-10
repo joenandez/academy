@@ -444,6 +444,9 @@ test('run can launch Codex while preserving provider passthrough exactly', () =>
   assert.match(profile, /sandbox_mode = "workspace-write"/);
   assert.match(profile, /approval_policy = "on-request"/);
   assert.match(profile, new RegExp(`writable_roots = \\[${re(JSON.stringify(agentDir))}\\]`));
+  assert.match(profile, /\[\[hooks\.SessionStart\]\]/);
+  assert.match(profile, new RegExp(`command = "node ${re(join(repoRoot, 'hooks', 'register_session.mjs'))}"`));
+  assert.match(profile, /\[\[hooks\.Stop\]\]/);
   assert.match(profile, new RegExp(`command = "node ${re(join(repoRoot, 'hooks', 'sync_memory.mjs'))}"`));
   assert.doesNotMatch(profile, /api_key|model_provider|mcp_servers/i);
   assert.equal(existsSync(projectSelfUpdatePath), true);

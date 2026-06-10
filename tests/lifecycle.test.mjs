@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,6 +9,10 @@ const repoRoot = new URL('..', import.meta.url).pathname;
 const cli = join(repoRoot, 'bin', 'academy');
 const node = process.execPath;
 const today = new Date().toISOString().slice(0, 10);
+
+function readJsonl(path) {
+  return readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+}
 
 function runCli(args, options = {}) {
   return execFileSync(node, [cli, ...args], {
@@ -42,10 +46,10 @@ if (pluginIdx < 0) process.exit(0);
 const pluginRoot = args[pluginIdx + 1];
 const manifest = JSON.parse(readFileSync(join(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf8'));
 const hooksConfig = JSON.parse(readFileSync(join(pluginRoot, manifest.hooks), 'utf8'));
-const stopHooks = hooksConfig.hooks?.Stop ?? [];
 const payload = JSON.stringify({ session_id: ${JSON.stringify(sessionId)}, cwd: process.cwd() });
 
-for (const group of stopHooks) {
+for (const eventName of ['SessionStart', 'Stop']) {
+for (const group of hooksConfig.hooks?.[eventName] ?? []) {
   for (const hook of group.hooks ?? []) {
     const result = spawnSync(hook.command, {
       shell: true,
@@ -58,6 +62,7 @@ for (const group of stopHooks) {
       process.exit(result.status ?? 1);
     }
   }
+}
 }
 `);
   chmodSync(path, 0o755);
@@ -82,24 +87,33 @@ if (profileIdx < 0) process.exit(2);
 const profileName = args[profileIdx + 1];
 const profilePath = join(process.env.CODEX_HOME, profileName + '.config.toml');
 const profile = readFileSync(profilePath, 'utf8');
-const match = profile.match(/command = "([^"]+)"/);
-if (!match) process.exit(3);
+const hookCommands = {};
+let currentEvent = null;
+for (const line of profile.split('\\n')) {
+  const eventMatch = line.match(/^\\[\\[hooks\\.([^.\\]]+)\\]\\]$/);
+  if (eventMatch) currentEvent = eventMatch[1];
+  const commandMatch = line.match(/^command = "([^"]+)"$/);
+  if (currentEvent && commandMatch) hookCommands[currentEvent] = commandMatch[1];
+}
 
 const payload = JSON.stringify({
   session_id: ${JSON.stringify(sessionId)},
-  hook_event_name: 'Stop',
   cwd: process.cwd(),
   model: 'fake-codex',
 });
-const result = spawnSync(match[1], {
+for (const eventName of ['SessionStart', 'Stop']) {
+const command = hookCommands[eventName];
+if (!command) process.exit(3);
+const result = spawnSync(command, {
   shell: true,
-  input: payload,
+  input: JSON.stringify({ ...JSON.parse(payload), hook_event_name: eventName }),
   encoding: 'utf8',
   env: process.env,
 });
 if (result.status !== 0) {
   process.stderr.write(result.stderr || result.stdout || '');
   process.exit(result.status ?? 1);
+}
 }
 `);
   chmodSync(path, 0o755);
@@ -129,6 +143,7 @@ test('academy run lifecycle invokes project plugin Stop hook and syncs memory', 
   const env = {
     AGENTS_ROOT: agentsRoot,
     ACADEMY_CLAUDE_BIN: fakeClaude,
+    HOME: root,
     SUBSPACE_HOME: subspaceHome,
     GROVE_MEMORY_ENABLED: '1',
     GROVE_PROJECT_NAME: 'academy',
@@ -140,7 +155,13 @@ test('academy run lifecycle invokes project plugin Stop hook and syncs memory', 
 
   const agentDir = join(agentsRoot, 'kai');
   const resolvedProjectDir = realpathSync(projectDir);
-  const sessions = readFileSync(join(agentDir, 'memory', 'sessions.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const globalSessions = readJsonl(join(root, '.academy', 'sessions.jsonl'));
+  assert.equal(globalSessions.length, 1);
+  assert.equal(globalSessions[0].sessionId, sessionId);
+  assert.equal(globalSessions[0].agentName, 'kai');
+  assert.equal(globalSessions[0].cwd, resolvedProjectDir);
+
+  const sessions = readJsonl(join(agentDir, 'memory', 'sessions.jsonl'));
   assert.equal(sessions.length, 1);
   assert.equal(sessions[0].sessionId, sessionId);
   assert.equal(sessions[0].agentName, 'kai');
@@ -187,6 +208,7 @@ test('academy run codex lifecycle invokes profile Stop hook and syncs memory', (
     AGENTS_ROOT: agentsRoot,
     CODEX_HOME: codexHome,
     ACADEMY_CODEX_BIN: fakeCodex,
+    HOME: root,
     SUBSPACE_HOME: subspaceHome,
     GROVE_MEMORY_ENABLED: '1',
     GROVE_PROJECT_NAME: 'academy',
@@ -198,7 +220,15 @@ test('academy run codex lifecycle invokes profile Stop hook and syncs memory', (
 
   const agentDir = join(agentsRoot, 'kai');
   const resolvedProjectDir = realpathSync(projectDir);
-  const sessions = readFileSync(join(agentDir, 'memory', 'sessions.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  const globalSessionsPath = join(root, '.academy', 'sessions.jsonl');
+  assert.equal(existsSync(globalSessionsPath), true);
+  const globalSessions = readJsonl(globalSessionsPath);
+  assert.equal(globalSessions.length, 1);
+  assert.equal(globalSessions[0].sessionId, sessionId);
+  assert.equal(globalSessions[0].agentName, 'kai');
+  assert.equal(globalSessions[0].cwd, resolvedProjectDir);
+
+  const sessions = readJsonl(join(agentDir, 'memory', 'sessions.jsonl'));
   assert.equal(sessions.length, 1);
   assert.equal(sessions[0].sessionId, sessionId);
   assert.equal(sessions[0].agentName, 'kai');
