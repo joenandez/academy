@@ -46,6 +46,28 @@ test('SessionStart identity hook writes one valid global Academy session index r
   assert.match(rows[0].startedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test('SessionStart identity hook is idempotent for duplicate session delivery', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-session-index-'));
+  const payload = {
+    session_id: 'session-agent',
+    cwd: '/project',
+  };
+
+  const first = runHook({ home: root, payload });
+  const second = runHook({ home: root, payload });
+
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(second.status, 0, second.stderr);
+
+  const rows = readFileSync(join(root, '.academy', 'sessions.jsonl'), 'utf8')
+    .trim()
+    .split('\n')
+    .map(JSON.parse);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].sessionId, 'session-agent');
+});
+
 test('SessionStart identity hook exits cleanly without writing when required identity is missing', () => {
   const missingSessionHome = mkdtempSync(join(tmpdir(), 'academy-session-index-'));
   const missingSession = runHook({

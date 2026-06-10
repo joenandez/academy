@@ -430,7 +430,9 @@ test('run can launch Codex while preserving provider passthrough exactly', () =>
   const agentDir = join(agentsRoot, 'kai');
   const promptPath = join(agentDir, '.academy', 'generated', 'academy-system-prompt.md');
   const profilePath = join(codexHome, 'academy-kai.config.toml');
+  const configPath = join(codexHome, 'config.toml');
   const projectSelfUpdatePath = join(projectDir, '.agents', 'skills', 'self-update', 'SKILL.md');
+  const hooksPath = join(codexHome, 'hooks.json');
   const profile = readFileSync(profilePath, 'utf8');
 
   assert.match(output, /Launching kai with Codex/);
@@ -444,23 +446,42 @@ test('run can launch Codex while preserving provider passthrough exactly', () =>
   assert.match(profile, /sandbox_mode = "workspace-write"/);
   assert.match(profile, /approval_policy = "on-request"/);
   assert.match(profile, new RegExp(`writable_roots = \\[${re(JSON.stringify(agentDir))}\\]`));
-  assert.match(profile, /\[\[hooks\.SessionStart\]\]/);
-  assert.match(profile, new RegExp(`command = "node ${re(join(repoRoot, 'hooks', 'register_session.mjs'))}"`));
-  assert.match(profile, /\[\[hooks\.Stop\]\]/);
-  assert.match(profile, new RegExp(`command = "node ${re(join(repoRoot, 'hooks', 'sync_memory.mjs'))}"`));
   assert.doesNotMatch(profile, /api_key|model_provider|mcp_servers/i);
   assert.equal(existsSync(projectSelfUpdatePath), true);
   assert.match(readFileSync(projectSelfUpdatePath, 'utf8'), /^name: self-update/m);
+  const hooks = JSON.parse(readFileSync(hooksPath, 'utf8'));
+  assert.equal(hooks.hooks.SessionStart.at(-1).hooks[0]._academy, 'academy-runtime-hooks-v1');
+  assert.match(hooks.hooks.SessionStart.at(-1).hooks[0].command, new RegExp(re(join(repoRoot, 'hooks', 'register_session.mjs'))));
+  assert.equal(hooks.hooks.Stop.at(-1).hooks[0]._academy, 'academy-runtime-hooks-v1');
+  assert.match(hooks.hooks.Stop.at(-1).hooks[0].command, new RegExp(re(join(repoRoot, 'hooks', 'sync_memory.mjs'))));
+  const config = readFileSync(configPath, 'utf8');
+  assert.match(config, new RegExp(`\\[hooks\\.state\\.${re(JSON.stringify(`${hooksPath}:session_start:0:0`))}\\]`));
+  assert.match(config, new RegExp(`\\[hooks\\.state\\.${re(JSON.stringify(`${hooksPath}:stop:0:0`))}\\]`));
+  assert.match(config, /enabled = true/);
 });
 
-test('codex project skill bridge preserves existing project-local skills', () => {
+test('codex project bridge preserves existing project-local skills and global hooks', () => {
   const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
   const agentsRoot = join(root, 'agents');
   const codexHome = join(root, 'codex-home');
   const projectDir = join(root, 'project');
   const existingSkillDir = join(projectDir, '.agents', 'skills', 'check-in');
+  const existingHooksDir = join(projectDir, '.codex');
+  const globalHooksPath = join(codexHome, 'hooks.json');
   mkdirSync(existingSkillDir, { recursive: true });
+  mkdirSync(existingHooksDir, { recursive: true });
+  mkdirSync(codexHome, { recursive: true });
   writeFileSync(join(existingSkillDir, 'SKILL.md'), '---\nname: check-in\n---\n\n# Project Check In\n');
+  writeFileSync(join(existingHooksDir, 'hooks.json'), JSON.stringify({
+    hooks: {
+      SessionStart: [{ matcher: '*', hooks: [{ type: 'command', command: 'echo project-session' }] }],
+    },
+  }, null, 2) + '\n');
+  writeFileSync(globalHooksPath, JSON.stringify({
+    hooks: {
+      SessionStart: [{ matcher: '*', hooks: [{ type: 'command', command: 'echo global-session' }] }],
+    },
+  }, null, 2) + '\n');
   runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
 
   runCli(['run', 'kai', '--agent', 'codex', '--', 'exec', 'prompt text'], {
@@ -471,6 +492,16 @@ test('codex project skill bridge preserves existing project-local skills', () =>
   assert.match(readFileSync(join(existingSkillDir, 'SKILL.md'), 'utf8'), /Project Check In/);
   assert.equal(existsSync(join(projectDir, '.agents', 'skills', 'self-update', 'SKILL.md')), true);
   assert.equal(existsSync(join(projectDir, '.agents', 'skills', 'nightly-consolidation', 'SKILL.md')), true);
+  const projectHooks = JSON.parse(readFileSync(join(existingHooksDir, 'hooks.json'), 'utf8'));
+  assert.equal(projectHooks.hooks.SessionStart.length, 1);
+  assert.equal(projectHooks.hooks.SessionStart[0].hooks[0].command, 'echo project-session');
+  const globalHooks = JSON.parse(readFileSync(globalHooksPath, 'utf8'));
+  assert.equal(globalHooks.hooks.SessionStart[0].hooks[0].command, 'echo global-session');
+  assert.equal(globalHooks.hooks.SessionStart.at(-1).hooks[0]._academy, 'academy-runtime-hooks-v1');
+  assert.equal(globalHooks.hooks.Stop.at(-1).hooks[0]._academy, 'academy-runtime-hooks-v1');
+  const config = readFileSync(join(codexHome, 'config.toml'), 'utf8');
+  assert.match(config, new RegExp(`\\[hooks\\.state\\.${re(JSON.stringify(`${globalHooksPath}:session_start:1:0`))}\\]`));
+  assert.match(config, new RegExp(`\\[hooks\\.state\\.${re(JSON.stringify(`${globalHooksPath}:stop:0:0`))}\\]`));
 });
 
 test('create writes and run refreshes the generated system prompt from surfaces', () => {

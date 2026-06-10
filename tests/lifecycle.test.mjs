@@ -49,20 +49,20 @@ const hooksConfig = JSON.parse(readFileSync(join(pluginRoot, manifest.hooks), 'u
 const payload = JSON.stringify({ session_id: ${JSON.stringify(sessionId)}, cwd: process.cwd() });
 
 for (const eventName of ['SessionStart', 'Stop']) {
-for (const group of hooksConfig.hooks?.[eventName] ?? []) {
-  for (const hook of group.hooks ?? []) {
-    const result = spawnSync(hook.command, {
-      shell: true,
-      input: payload,
-      encoding: 'utf8',
-      env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot },
-    });
-    if (result.status !== 0) {
-      process.stderr.write(result.stderr || result.stdout || '');
-      process.exit(result.status ?? 1);
+  for (const group of hooksConfig.hooks?.[eventName] ?? []) {
+    for (const hook of group.hooks ?? []) {
+      const result = spawnSync(hook.command, {
+        shell: true,
+        input: payload,
+        encoding: 'utf8',
+        env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginRoot },
+      });
+      if (result.status !== 0) {
+        process.stderr.write(result.stderr || result.stdout || '');
+        process.exit(result.status ?? 1);
+      }
     }
   }
-}
 }
 `);
   chmodSync(path, 0o755);
@@ -86,15 +86,8 @@ const profileIdx = args.indexOf('--profile');
 if (profileIdx < 0) process.exit(2);
 const profileName = args[profileIdx + 1];
 const profilePath = join(process.env.CODEX_HOME, profileName + '.config.toml');
-const profile = readFileSync(profilePath, 'utf8');
-const hookCommands = {};
-let currentEvent = null;
-for (const line of profile.split('\\n')) {
-  const eventMatch = line.match(/^\\[\\[hooks\\.([^.\\]]+)\\]\\]$/);
-  if (eventMatch) currentEvent = eventMatch[1];
-  const commandMatch = line.match(/^command = "([^"]+)"$/);
-  if (currentEvent && commandMatch) hookCommands[currentEvent] = commandMatch[1];
-}
+readFileSync(profilePath, 'utf8');
+const hooksConfig = JSON.parse(readFileSync(join(process.env.CODEX_HOME, 'hooks.json'), 'utf8'));
 
 const payload = JSON.stringify({
   session_id: ${JSON.stringify(sessionId)},
@@ -102,18 +95,22 @@ const payload = JSON.stringify({
   model: 'fake-codex',
 });
 for (const eventName of ['SessionStart', 'Stop']) {
-const command = hookCommands[eventName];
-if (!command) process.exit(3);
-const result = spawnSync(command, {
-  shell: true,
-  input: JSON.stringify({ ...JSON.parse(payload), hook_event_name: eventName }),
-  encoding: 'utf8',
-  env: process.env,
-});
-if (result.status !== 0) {
-  process.stderr.write(result.stderr || result.stdout || '');
-  process.exit(result.status ?? 1);
-}
+  for (const group of hooksConfig.hooks?.[eventName] ?? []) {
+    for (const hook of group.hooks ?? []) {
+      const command = hook.command;
+      if (!command) continue;
+      const result = spawnSync(command, {
+        shell: true,
+        input: JSON.stringify({ ...JSON.parse(payload), hook_event_name: eventName }),
+        encoding: 'utf8',
+        env: process.env,
+      });
+      if (result.status !== 0) {
+        process.stderr.write(result.stderr || result.stdout || '');
+        process.exit(result.status ?? 1);
+      }
+    }
+  }
 }
 `);
   chmodSync(path, 0o755);
@@ -181,7 +178,7 @@ test('academy run lifecycle invokes project plugin Stop hook and syncs memory', 
   assert.equal(fakeInvocation.projectDir, resolvedProjectDir);
 });
 
-test('academy run codex lifecycle invokes profile Stop hook and syncs memory', () => {
+test('academy run codex lifecycle invokes global hooks and syncs memory', () => {
   const root = mkdtempSync(join(tmpdir(), 'academy-codex-lifecycle-'));
   const agentsRoot = join(root, 'agents');
   const codexHome = join(root, 'codex-home');

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,54 @@ function readPayload() {
     return input ? JSON.parse(input) : null;
   } catch {
     return null;
+  }
+}
+
+function sameRealPath(left, right) {
+  try {
+    return realpathSync(left) === realpathSync(right);
+  } catch {
+    return left === right;
+  }
+}
+
+function runtimeEnvFor(payload, env) {
+  if (env.ACADEMY_AGENT_DIR) return env;
+  if (!env.ACADEMY_RUNTIME_CONTEXT) return env;
+
+  try {
+    const context = JSON.parse(readFileSync(env.ACADEMY_RUNTIME_CONTEXT, 'utf8'));
+    if (context.expiresAt && Date.parse(context.expiresAt) < Date.now()) return env;
+    const merged = { ...env, ...(context.env || {}) };
+    if (payload?.cwd && merged.ACADEMY_PROJECT_DIR && !sameRealPath(payload.cwd, merged.ACADEMY_PROJECT_DIR)) {
+      return env;
+    }
+    return merged;
+  } catch {
+    return env;
+  }
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withFileLock(lockDir, fn) {
+  const started = Date.now();
+  while (true) {
+    try {
+      mkdirSync(lockDir, { recursive: false });
+      break;
+    } catch {
+      if (Date.now() - started > 5000) return fn();
+      sleep(25);
+    }
+  }
+
+  try {
+    return fn();
+  } finally {
+    rmSync(lockDir, { recursive: true, force: true });
   }
 }
 
@@ -51,25 +99,27 @@ function recordSession(memoryDir, payload, env) {
   const sessionsPath = join(memoryDir, 'sessions.jsonl');
   mkdirSync(memoryDir, { recursive: true });
 
-  if (existsSync(sessionsPath)) {
-    for (const line of readFileSync(sessionsPath, 'utf8').split('\n')) {
-      if (!line.trim()) continue;
-      try {
-        if (JSON.parse(line).sessionId === sessionId) return;
-      } catch {
-        // Ignore malformed session lines.
+  withFileLock(join(memoryDir, 'sessions.lock'), () => {
+    if (existsSync(sessionsPath)) {
+      for (const line of readFileSync(sessionsPath, 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          if (JSON.parse(line).sessionId === sessionId) return;
+        } catch {
+          // Ignore malformed session lines.
+        }
       }
     }
-  }
 
-  appendFileSync(sessionsPath, JSON.stringify({
-    sessionId,
-    agentName: env.ACADEMY_AGENT_NAME || null,
-    timestamp: new Date().toISOString(),
-    cwd: payload.cwd || null,
-    projectDir: env.ACADEMY_PROJECT_DIR || null,
-    source: 'stop',
-  }) + '\n');
+    appendFileSync(sessionsPath, JSON.stringify({
+      sessionId,
+      agentName: env.ACADEMY_AGENT_NAME || null,
+      timestamp: new Date().toISOString(),
+      cwd: payload.cwd || null,
+      projectDir: env.ACADEMY_PROJECT_DIR || null,
+      source: 'stop',
+    }) + '\n');
+  });
 }
 
 function subspaceObservationsDir(env) {
@@ -94,6 +144,7 @@ function memorySyncEnabled(env) {
 }
 
 export function syncAcademyMemory(payload, env = process.env) {
+  env = runtimeEnvFor(payload, env);
   const agentDir = env.ACADEMY_AGENT_DIR;
   const sessionId = payload?.session_id;
   if (!agentDir || !sessionId) return { synced: 0 };
