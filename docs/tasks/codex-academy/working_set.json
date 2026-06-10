@@ -1,0 +1,45 @@
+{
+  "branch": "codex-academy",
+  "scope": "uncommitted working set — Codex session-start dedup + file-lock + runtime-context env resolution",
+  "files": [
+    "hooks/register_session.mjs",
+    "hooks/sync_memory.mjs",
+    "scripts/agent.mjs",
+    "tests/agent-cli.test.mjs",
+    "tests/lifecycle.test.mjs",
+    "tests/session-index.test.mjs"
+  ],
+  "risk_plan": [
+    {
+      "tier": "P1",
+      "file": "hooks/register_session.mjs",
+      "behavior": "SessionStart global index writer; new file-lock + sessionId dedup + runtimeEnvFor env resolution from ACADEMY_RUNTIME_CONTEXT (expiry + cwd/project match). Concurrency + idempotency correctness matters."
+    },
+    {
+      "tier": "P1",
+      "file": "hooks/sync_memory.mjs",
+      "behavior": "Stop hook per-agent memory + session writer; file-lock around dedup-then-append; runtimeEnvFor gating on ACADEMY_AGENT_DIR. Idempotent session row write."
+    },
+    {
+      "tier": "P1",
+      "file": "scripts/agent.mjs",
+      "behavior": "CLI runtime — Codex hook state writer (trusted-entry upsert in place), runtime-context generation, hook command construction. Selector/lifecycle wiring."
+    },
+    {
+      "tier": "P3",
+      "file": "tests/agent-cli.test.mjs",
+      "behavior": "SKIP — test file"
+    },
+    {
+      "tier": "P3",
+      "file": "tests/lifecycle.test.mjs",
+      "behavior": "SKIP — test file"
+    },
+    {
+      "tier": "P3",
+      "file": "tests/session-index.test.mjs",
+      "behavior": "SKIP — test file"
+    }
+  ],
+  "notes": "No P0 (no auth/payment/PII/crypto/migrations). Prune: no dead code removed. Existing suite 37 passed. Manual-review: 4 lock/runtime helpers duplicated across both hooks (intentional, deliberate gate difference) — behavior-neutral extraction out of scope."
+}
