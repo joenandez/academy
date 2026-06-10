@@ -24,7 +24,7 @@ current text, make a change, or preserve surrounding context.
 - `threads.md`: `{{threads_path}}`
 - `notes.md`: `{{notes_path}}`
 - `dailys.md`: `{{dailys_path}}`
-- `.claude/skills`: `{{skills_dir}}`
+- `{{skills_surface}}`: `{{skills_dir}}`
 - This skill: `{{self_update_path}}`
 
 ## When To Use
@@ -77,7 +77,7 @@ do not just keep appending.
   notes.md"); hand-edit only to curate or graduate.
 - `dailys.md`: concise session/day summaries. What happened, decisions,
   blockers, next step.
-- `.claude/skills/`: repeatable procedures. Create or edit only when there is a
+- `{{skills_surface}}/`: repeatable procedures. Create or edit only when there is a
   clear trigger, procedure, and output shape.
 
 ## Update Procedure

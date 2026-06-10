@@ -119,13 +119,13 @@
       "id": "phase-0",
       "title": "Phase 0 - Verify Codex Assumptions",
       "summary": "Confirm current Codex CLI/config assumptions before building runtime behavior.",
-      "status": "pending",
+      "status": "done",
       "parents": [
         {
           "id": "1",
           "title": "Codex assumptions and fixture verification",
           "description": "Capture executable expectations for Codex flags, profile config shape, and hook/profile behavior.",
-          "status": "pending",
+          "status": "done",
           "predecessor": "none",
           "unblocks": [
             "2",
@@ -136,7 +136,7 @@
               "id": "1.1",
               "title": "TODO-RED: codify run parser and passthrough expectations",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Pending RED tests for runtime selection defaults, explicit providers, invalid provider, and passthrough preservation.",
               "consumed_by": [
                 "2.1"
@@ -178,7 +178,7 @@
               "id": "1.2",
               "title": "TODO-RED: codify neutral prompt expectations",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Pending RED prompt tests for `.academy/generated/academy-system-prompt.md`.",
               "consumed_by": [
                 "2.3"
@@ -216,7 +216,7 @@
               "id": "1.3",
               "title": "TODO-RED: codify real Codex profile and launch expectations",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Pending RED tests plus a real Codex fixture gate for profile resolution, hook TOML shape, and launch argv/env.",
               "consumed_by": [
                 "4.1",
@@ -255,7 +255,7 @@
               "id": "1.4",
               "title": "TODO-RED: codify Codex-visible universal skills",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Pending RED tests for `.agents/skills` universal skill rendering.",
               "consumed_by": [
                 "3.1",
@@ -294,7 +294,7 @@
               "id": "1.5",
               "title": "TODO-RED: codify nightly runtime selection",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Pending RED Helm scheduling tests for default Claude, explicit Codex, and mixed last-used runtime.",
               "consumed_by": [
                 "5.1"
@@ -340,13 +340,13 @@
       "id": "phase-1",
       "title": "Phase 1 - Runtime Parser And Shared Preparation",
       "summary": "Implement provider selection and shared run preparation while preserving Claude behavior.",
-      "status": "pending",
+      "status": "done",
       "parents": [
         {
           "id": "2",
           "title": "Runtime selection and prompt preparation",
           "description": "Add runtime option parsing, shared preparation, neutral prompt output, and unchanged Claude launcher behavior.",
-          "status": "pending",
+          "status": "done",
           "predecessor": "1",
           "unblocks": [
             "3",
@@ -357,7 +357,7 @@
               "id": "2.1",
               "title": "Implement run option parser",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "Parsed runtime provider plus untouched passthrough for `academy run`.",
               "consumed_by": [
                 "2.2",
@@ -402,7 +402,7 @@
               "id": "2.2",
               "title": "Extract shared run preparation and Claude launcher",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "Shared run context and provider-specific Claude launcher retaining existing behavior.",
               "consumed_by": [
                 "4.2",
@@ -447,7 +447,7 @@
               "id": "2.3",
               "title": "Implement neutral prompt output path",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "`<agentDir>/.academy/generated/academy-system-prompt.md` used by both launchers.",
               "consumed_by": [
                 "2.4",
@@ -491,7 +491,7 @@
               "id": "2.4",
               "title": "Update Claude tests for neutral prompt without behavior loss",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Claude regression tests aligned to neutral prompt path.",
               "consumed_by": [
                 "6.1"
@@ -534,13 +534,13 @@
       "id": "phase-2",
       "title": "Phase 2 - Skill Surface Parity",
       "summary": "Expose Academy universal skills to Codex while preserving Claude skills.",
-      "status": "pending",
+      "status": "done",
       "parents": [
         {
           "id": "3",
           "title": "Dual skill rendering",
           "description": "Render the same universal Academy skills into Claude and Codex-visible locations.",
-          "status": "pending",
+          "status": "done",
           "predecessor": "2",
           "unblocks": [
             "4",
@@ -551,7 +551,7 @@
               "id": "3.1",
               "title": "Implement shared skill renderer for Claude and Codex surfaces",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "Universal skills rendered into `.claude/skills` and `.agents/skills` with per-surface path text.",
               "consumed_by": [
                 "4.2",
@@ -604,13 +604,13 @@
       "id": "phase-3",
       "title": "Phase 3 - Codex Profile And Launch",
       "summary": "Generate Codex profile configuration and launch Codex with protected Academy prompt identity.",
-      "status": "pending",
+      "status": "done",
       "parents": [
         {
           "id": "4",
           "title": "Codex profile generation and launcher",
           "description": "Add profile-writing and Codex runtime launch behavior using normal user Codex config layering.",
-          "status": "pending",
+          "status": "done",
           "predecessor": "3",
           "unblocks": [
             "5",
@@ -621,7 +621,7 @@
               "id": "4.1",
               "title": "Implement Codex profile writer",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "`$CODEX_HOME/academy-<agent>.config.toml` with Academy defaults/hooks.",
               "consumed_by": [
                 "4.2",
@@ -670,7 +670,7 @@
               "id": "4.2",
               "title": "Implement Codex launcher",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "Codex runtime path selected by `--agent codex`.",
               "consumed_by": [
                 "4.3",
@@ -718,7 +718,7 @@
               "id": "4.3",
               "title": "Add fake Codex lifecycle/profile test",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Provider-specific Codex lifecycle confidence without requiring real Codex in default suite.",
               "consumed_by": [
                 "6.1"
@@ -761,13 +761,13 @@
       "id": "phase-4",
       "title": "Phase 4 - Nightly Runtime Selection",
       "summary": "Use Helm re-registration to schedule nightly tasks with the selected runtime.",
-      "status": "pending",
+      "status": "done",
       "parents": [
         {
           "id": "5",
           "title": "Nightly runtime scheduling",
           "description": "Use Helm re-registration to make scheduled/nightly Academy runs use the selected runtime.",
-          "status": "pending",
+          "status": "done",
           "predecessor": "4",
           "unblocks": [
             "6"
@@ -777,7 +777,7 @@
               "id": "5.1",
               "title": "Update nightly registration to honor selected runtime",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "Helm scheduled command includes the selected runtime, carrying last-used runtime behavior for mixed users.",
               "consumed_by": [
                 "6.1",
@@ -834,13 +834,13 @@
       "id": "phase-5",
       "title": "Phase 5 - Regression, Documentation, And Cleanup",
       "summary": "Complete docs and full verification while keeping scope boundaries intact.",
-      "status": "pending",
+      "status": "done",
       "parents": [
         {
           "id": "6",
           "title": "Regression and documentation",
           "description": "Verify the full suite and update README to document runtime parity behavior.",
-          "status": "pending",
+          "status": "done",
           "predecessor": "5",
           "unblocks": [
             "none"
@@ -850,7 +850,7 @@
               "id": "6.1",
               "title": "Run full regression suite and repair scoped failures",
               "type": "test",
-              "status": "pending",
+              "status": "done",
               "produces": "Passing default test suite for Claude and Codex parity changes.",
               "consumed_by": [
                 "6.2"
@@ -893,7 +893,7 @@
               "id": "6.2",
               "title": "Update README for dual-runtime usage",
               "type": "build",
-              "status": "pending",
+              "status": "done",
               "produces": "README covering Claude default, Codex runtime, Codex layering, skills, and nightly behavior.",
               "consumed_by": [
                 "final-handoff"

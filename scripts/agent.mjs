@@ -53,7 +53,9 @@ const SURFACES = ['identity', 'role', 'knowledge', 'goals', 'priorities', 'threa
 const UNIVERSAL_SKILLS = ['check-in', 'self-update', 'nightly-consolidation'];
 const NIGHTLY_JOB_CRON = '0 22 * * *';
 const SCHEDULED_CLAUDE_PERMISSION_ARGS = ['--permission-mode', 'auto'];
+const SCHEDULED_CODEX_PERMISSION_ARGS = ['--ask-for-approval', 'never', '--sandbox', 'workspace-write', 'exec'];
 const ACADEMY_SYSTEM_PROMPT = 'academy-system-prompt.md';
+const RUNTIMES = new Set(['claude-code', 'codex']);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Argument parsing
@@ -65,7 +67,7 @@ function parseArgs(argv) {
   switch (command) {
     case 'create':  return { command, name: rest[0] };
     case 'hire':    return { command };
-    case 'run':     return { command, name: rest[0], passthrough: extractPassthrough(rest.slice(1)) };
+    case 'run':     return parseRunArgs(rest);
     case 'list':    return { command, json: hasFlag(rest, '--json') };
     case 'inspect': return { command, name: rest.find((arg) => arg !== '--json'), json: hasFlag(rest, '--json') };
     case 'clean':   return { command, name: rest[0] };
@@ -80,6 +82,37 @@ function parseArgs(argv) {
 
 function hasFlag(args, flag) {
   return args.includes(flag);
+}
+
+function parseRunArgs(rest) {
+  const name = rest[0];
+  const afterName = rest.slice(1);
+  const dashIdx = afterName.indexOf('--');
+  const optionArgs = dashIdx >= 0 ? afterName.slice(0, dashIdx) : afterName;
+  const passthrough = dashIdx >= 0 ? afterName.slice(dashIdx + 1) : [];
+  let runtime = 'claude-code';
+
+  for (let i = 0; i < optionArgs.length; i++) {
+    const arg = optionArgs[i];
+    if (arg === '--agent') {
+      const value = optionArgs[++i];
+      if (!RUNTIMES.has(value)) return invalidRunOption(`Invalid --agent value: ${value ?? '(none)'}`);
+      runtime = value;
+    } else if (arg?.startsWith('--agent=')) {
+      const value = arg.slice('--agent='.length);
+      if (!RUNTIMES.has(value)) return invalidRunOption(`Invalid --agent value: ${value || '(none)'}`);
+      runtime = value;
+    } else if (arg) {
+      return invalidRunOption(`Unknown run option: ${arg}`);
+    }
+  }
+
+  return { command: 'run', name, runtime, passthrough };
+}
+
+function invalidRunOption(message) {
+  console.error(`${message}. Use --agent claude-code or --agent codex before --.`);
+  return { command: 'help', exitCode: 1 };
 }
 
 function extractPassthrough(rest) {
@@ -132,7 +165,8 @@ Usage: academy <command> [options]
 Commands:
   create <name>           Scaffold a new portable agent at ~/.academy/agents/<name>/
   hire                    Interactive hire flow — produces 8 boot files via Claude Code
-  run <name> [-- ...]     Launch Claude Code against current project (plugin mode)
+  run <name> [--agent claude-code|codex] [-- ...]
+                          Launch an agent with Claude Code (default) or Codex
   list                    List all agents
   inspect <name>          Inspect one agent
   clean <name>            Truncate transient surfaces (notes.md, threads.md)
@@ -369,7 +403,7 @@ objective: ""
 
 # Boot context — 8 surfaces, ~5–6k tokens combined (see scope §3).
 # Files live alongside this yaml; academy run compiles them into the generated
-# .claude/${ACADEMY_SYSTEM_PROMPT} before launching Claude Code.
+# .academy/generated/${ACADEMY_SYSTEM_PROMPT} before launching an agent runtime.
 surfaces:
   - identity.md
   - role.md
@@ -391,8 +425,8 @@ function writeAgentClaudeMd(dir, name) {
 
 User instructions for this agent. The 8 boot surfaces (\`identity.md\`,
 \`role.md\`, \`knowledge.md\`, \`goals.md\`, \`priorities.md\`, \`threads.md\`,
-\`notes.md\`, \`dailys.md\`) are compiled into \`.claude/${ACADEMY_SYSTEM_PROMPT}\`
-when \`academy run ${name}\` launches Claude Code.
+\`notes.md\`, \`dailys.md\`) are compiled into \`.academy/generated/${ACADEMY_SYSTEM_PROMPT}\`
+when \`academy run ${name}\` launches an agent runtime.
 
 Add user-driven instructions below as they come up.
 `;
@@ -430,6 +464,19 @@ function writeProjectPluginInstance(projectDir, name, dir) {
   return pluginDir;
 }
 
+function writeProjectCodexSkillBridge(projectDir, dir) {
+  const agentSkillsDir = join(dir, '.agents', 'skills');
+  const projectSkillsDir = join(projectDir, '.agents', 'skills');
+  mkdirSync(projectSkillsDir, { recursive: true });
+
+  for (const skillName of UNIVERSAL_SKILLS) {
+    const source = join(agentSkillsDir, skillName);
+    const target = join(projectSkillsDir, skillName);
+    if (!existsSync(source) || existsSync(target)) continue;
+    ensureSymlink(source, target);
+  }
+}
+
 function renderTemplate(template, values) {
   return template.replace(/\{\{([a-z_]+)\}\}/g, (match, key) => {
     if (!(key in values)) throw new Error(`Unknown template variable: ${match}`);
@@ -437,8 +484,7 @@ function renderTemplate(template, values) {
   });
 }
 
-function universalSkillValues(dir, name) {
-  const skillsDir = join(dir, '.claude', 'skills');
+function universalSkillValues(dir, name, skillsDir) {
   const dreamsDir = join(dir, 'dreams');
   return {
     agent_name: name,
@@ -453,6 +499,7 @@ function universalSkillValues(dir, name) {
     dailys_path: join(dir, 'dailys.md'),
     memory_observations_path: join(dir, 'memory', 'observations'),
     dreams_dir: dreamsDir,
+    skills_surface: skillsDir.endsWith(join('.agents', 'skills')) ? '.agents/skills' : '.claude/skills',
     skills_dir: skillsDir,
     check_in_path: join(skillsDir, 'check-in', 'SKILL.md'),
     self_update_path: join(skillsDir, 'self-update', 'SKILL.md'),
@@ -460,14 +507,13 @@ function universalSkillValues(dir, name) {
   };
 }
 
-function writeUniversalSkill(dir, name, skillName) {
-  const skillsDir = join(dir, '.claude', 'skills');
+function writeUniversalSkill(dir, name, skillName, skillsDir) {
   const skillDir = join(skillsDir, skillName);
   const templatePath = join(ACADEMY_ROOT, 'templates', 'skills', skillName, 'SKILL.md');
   const template = readFileSync(templatePath, 'utf8');
 
   mkdirSync(skillDir, { recursive: true });
-  writeFileSync(join(skillDir, 'SKILL.md'), renderTemplate(template, universalSkillValues(dir, name)));
+  writeFileSync(join(skillDir, 'SKILL.md'), renderTemplate(template, universalSkillValues(dir, name, skillsDir)));
 }
 
 function writeSkillsScaffold(dir, name) {
@@ -475,12 +521,14 @@ function writeSkillsScaffold(dir, name) {
   // paths. Agent/domain skills can be added later by hire or self-update.
   writeDreamsDir(dir);
   writeMemoryScaffold(dir);
-  mkdirSync(join(dir, '.claude', 'skills'), { recursive: true });
-  for (const skillName of UNIVERSAL_SKILLS) writeUniversalSkill(dir, name, skillName);
+  for (const skillsDir of [join(dir, '.claude', 'skills'), join(dir, '.agents', 'skills')]) {
+    mkdirSync(skillsDir, { recursive: true });
+    for (const skillName of UNIVERSAL_SKILLS) writeUniversalSkill(dir, name, skillName, skillsDir);
+  }
 }
 
 function academySystemPromptPath(dir) {
-  return join(dir, '.claude', ACADEMY_SYSTEM_PROMPT);
+  return join(dir, '.academy', 'generated', ACADEMY_SYSTEM_PROMPT);
 }
 
 function surfaceTitle(surface) {
@@ -495,7 +543,7 @@ function readSurface(dir, surface) {
 }
 
 function renderAcademySystemPrompt(dir, name) {
-  mkdirSync(join(dir, '.claude'), { recursive: true });
+  mkdirSync(dirname(academySystemPromptPath(dir)), { recursive: true });
   const prompt = [
     '<!-- Generated by `academy`. Do not edit this file directly. Edit the source surfaces instead. -->',
     '',
@@ -578,7 +626,7 @@ function localTimezone() {
   return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles';
 }
 
-function registerNightlyConsolidationTask(dir, name) {
+function registerNightlyConsolidationTask(dir, name, runtime = 'claude-code') {
   const id = `${name}-nightly-consolidation`;
   if (process.env.ACADEMY_SKIP_NIGHTLY_TASK === '1') {
     return { id, registered: false, reason: 'skipped by ACADEMY_SKIP_NIGHTLY_TASK=1' };
@@ -591,6 +639,10 @@ function registerNightlyConsolidationTask(dir, name) {
     'and finish with the dreams report path.',
   ].join(' ');
 
+  const runArgs = runtime === 'codex'
+    ? ['run', name, '--agent', 'codex', '--', ...SCHEDULED_CODEX_PERMISSION_ARGS, prompt]
+    : ['run', name, '--agent', 'claude-code', '--', ...SCHEDULED_CLAUDE_PERMISSION_ARGS, '-p', prompt];
+
   const args = [
     'schedule',
     '--cwd', dir,
@@ -602,7 +654,7 @@ function registerNightlyConsolidationTask(dir, name) {
     '--tags', 'academy,nightly,consolidation',
     '--timeout-sec', '3600',
     '--',
-    'run', name, '--', ...SCHEDULED_CLAUDE_PERMISSION_ARGS, '-p', prompt,
+    ...runArgs,
   ];
 
   const result = spawnSync('helm-tasks', args, {
@@ -663,11 +715,66 @@ function launchClaude(args, { cwd, env, message }) {
   process.exit(result.status ?? 0);
 }
 
+function codexHome() {
+  return process.env.CODEX_HOME || join(homedir(), '.codex');
+}
+
+function codexProfileName(name) {
+  return `academy-${name}`;
+}
+
+function tomlString(value) {
+  return JSON.stringify(value);
+}
+
+function writeCodexProfile(dir, name) {
+  const profileName = codexProfileName(name);
+  const profilePath = join(codexHome(), `${profileName}.config.toml`);
+  mkdirSync(dirname(profilePath), { recursive: true });
+  const hookCommand = `node ${join(ACADEMY_ROOT, 'hooks', 'sync_memory.mjs')}`;
+  const toml =
+`# Generated by Academy. This profile adds Academy runtime hooks only.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+writable_roots = [${tomlString(dir)}]
+
+[features]
+hooks = true
+
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = ${tomlString(hookCommand)}
+timeout = 30
+statusMessage = "Syncing Academy memory"
+`;
+  writeFileSync(profilePath, toml);
+  return { profileName, profilePath };
+}
+
+function launchCodex(args, { cwd, env, message, profileName, profilePath }) {
+  console.log(message);
+  const codexBin = process.env.ACADEMY_CODEX_BIN || 'codex';
+  if (process.env.ACADEMY_DRY_RUN === '1') {
+    console.log(`[dry-run] ${codexBin} ${args.join(' ')}`);
+    console.log(`[dry-run] cwd=${cwd}`);
+    console.log(`[dry-run] CODEX_PROFILE=${profileName}`);
+    console.log(`[dry-run] CODEX_PROFILE_PATH=${profilePath}`);
+    if (env?.ACADEMY_AGENT_DIR) console.log(`[dry-run] ACADEMY_AGENT_DIR=${env.ACADEMY_AGENT_DIR}`);
+    if (env?.ACADEMY_PROJECT_DIR) console.log(`[dry-run] ACADEMY_PROJECT_DIR=${env.ACADEMY_PROJECT_DIR}`);
+    process.exit(0);
+  }
+  const result = spawnSync(codexBin, args, { stdio: 'inherit', cwd, env });
+  process.exit(result.status ?? 0);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // `run` — launch Claude Code against the current project via plugin mode
 // ─────────────────────────────────────────────────────────────────────────────
 
-function runAgent(name, passthrough) {
+function runAgent(name, runtime, passthrough) {
   validateName(name);
   const dir = agentDir(name);
   if (!existsSync(dir)) {
@@ -684,6 +791,11 @@ function runAgent(name, passthrough) {
 
   writeSkillsScaffold(dir, name);
   const systemPromptPath = renderAcademySystemPrompt(dir, name);
+  const codexProfile = runtime === 'codex' ? writeCodexProfile(dir, name) : undefined;
+  const nightlyTask = registerNightlyConsolidationTask(dir, name, runtime);
+  if (!nightlyTask.registered && process.env.ACADEMY_SKIP_NIGHTLY_TASK !== '1') {
+    console.error(`Warning: nightly consolidation job "${nightlyTask.id}" not updated: ${nightlyTask.reason}`);
+  }
 
   const env = {
     ...process.env,
@@ -693,10 +805,42 @@ function runAgent(name, passthrough) {
 
   const projectDir = resolve(process.cwd());
   if (isInside(projectDir, dir)) {
+    if (runtime === 'codex') {
+      launchCodex([
+        '--profile', codexProfile.profileName,
+        '-C', dir,
+        '--add-dir', dir,
+        '-c', `model_instructions_file=${JSON.stringify(systemPromptPath)}`,
+        ...passthrough,
+      ], {
+        cwd: dir,
+        env,
+        message: `Launching ${name} with Codex in agent home (${dir})`,
+        ...codexProfile,
+      });
+      return;
+    }
     launchClaude(['--system-prompt-file', systemPromptPath, ...passthrough], {
       cwd: dir,
       env,
-      message: `Launching ${name} in agent home (${dir})`,
+      message: `Launching ${name} with Claude Code in agent home (${dir})`,
+    });
+    return;
+  }
+
+  if (runtime === 'codex') {
+    writeProjectCodexSkillBridge(projectDir, dir);
+    launchCodex([
+      '--profile', codexProfile.profileName,
+      '-C', projectDir,
+      '--add-dir', dir,
+      '-c', `model_instructions_file=${JSON.stringify(systemPromptPath)}`,
+      ...passthrough,
+    ], {
+      cwd: projectDir,
+      env: { ...env, ACADEMY_PROJECT_DIR: projectDir },
+      message: `Launching ${name} with Codex for project ${basename(projectDir)}`,
+      ...codexProfile,
     });
     return;
   }
@@ -705,7 +849,7 @@ function runAgent(name, passthrough) {
   launchClaude(['--plugin-dir', pluginDir, '--system-prompt-file', systemPromptPath, ...passthrough], {
     cwd: projectDir,
     env: { ...env, ACADEMY_PROJECT_DIR: projectDir },
-    message: `Launching ${name} for project ${basename(projectDir)} (plugin: ${pluginDir})`,
+    message: `Launching ${name} with Claude Code for project ${basename(projectDir)} (plugin: ${pluginDir})`,
   });
 }
 
@@ -920,7 +1064,7 @@ function main() {
       hireAgent();
       break;
     case 'run':
-      runAgent(parsed.name, parsed.passthrough);
+      runAgent(parsed.name, parsed.runtime, parsed.passthrough);
       break;
     case 'list':
       if (parsed.json) listAgentsJson();

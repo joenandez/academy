@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, readFileSync, mkdtempSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,10 @@ const repoRoot = realpathSync(new URL('..', import.meta.url));
 const cli = join(repoRoot, 'bin', 'academy');
 const node = process.execPath;
 const surfaces = ['identity', 'role', 'knowledge', 'goals', 'priorities', 'threads', 'notes', 'dailys'];
+
+function re(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function runCli(args, options = {}) {
   return execFileSync(node, [cli, ...args], {
@@ -241,8 +245,11 @@ test('create surfaces the notes CLI: prompt header, permission, and self-update 
   runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
   const agentDir = join(agentsRoot, 'kai');
 
-  const prompt = readFileSync(join(agentDir, '.claude', 'academy-system-prompt.md'), 'utf8');
+  const prompt = readFileSync(join(agentDir, '.academy', 'generated', 'academy-system-prompt.md'), 'utf8');
   assert.match(prompt, /academy notes add/);
+  const agentYaml = readFileSync(join(agentDir, 'agent.yaml'), 'utf8');
+  assert.match(agentYaml, /\.academy\/generated\/academy-system-prompt\.md/);
+  assert.doesNotMatch(agentYaml, /\.claude\/academy-system-prompt\.md/);
 
   const settings = JSON.parse(readFileSync(join(agentDir, '.claude', 'settings.local.json'), 'utf8'));
   assert.ok(settings.permissions.allow.includes('Bash(academy:*)'));
@@ -379,12 +386,88 @@ test('run launches from the project cwd with a project-local plugin dir', () => 
 
   const pluginDir = join(resolvedProjectDir, '.academy', 'agents', 'kai');
   const agentDir = join(agentsRoot, 'kai');
-  const promptPath = join(agentDir, '.claude', 'academy-system-prompt.md');
-  assert.match(output, new RegExp(`--plugin-dir ${pluginDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(output, new RegExp(`--system-prompt-file ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(output, new RegExp(`\\[dry-run\\] cwd=${resolvedProjectDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(output, new RegExp(`ACADEMY_AGENT_DIR=${agentDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(output, new RegExp(`ACADEMY_PROJECT_DIR=${resolvedProjectDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  const promptPath = join(agentDir, '.academy', 'generated', 'academy-system-prompt.md');
+  assert.match(output, /with Claude Code/);
+  assert.match(output, new RegExp(`--plugin-dir ${re(pluginDir)}`));
+  assert.match(output, new RegExp(`--system-prompt-file ${re(promptPath)}`));
+  assert.match(output, /-- -p smoke| -p smoke/);
+  assert.match(output, new RegExp(`\\[dry-run\\] cwd=${re(resolvedProjectDir)}`));
+  assert.match(output, new RegExp(`ACADEMY_AGENT_DIR=${re(agentDir)}`));
+  assert.match(output, new RegExp(`ACADEMY_PROJECT_DIR=${re(resolvedProjectDir)}`));
+});
+
+test('run rejects invalid academy-owned runtime options before passthrough', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+
+  const invalidProvider = runCliExpectFail(['run', 'kai', '--agent', 'bad-runtime'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_DRY_RUN: '1' },
+  });
+  assert.equal(invalidProvider.status, 1);
+  assert.match(invalidProvider.stderr, /Invalid --agent value: bad-runtime/);
+
+  const unknownOption = runCliExpectFail(['run', 'kai', '--bogus'], {
+    env: { AGENTS_ROOT: agentsRoot, ACADEMY_DRY_RUN: '1' },
+  });
+  assert.equal(unknownOption.status, 1);
+  assert.match(unknownOption.stderr, /Unknown run option: --bogus/);
+});
+
+test('run can launch Codex while preserving provider passthrough exactly', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  const codexHome = join(root, 'codex-home');
+  const projectDir = join(root, 'project');
+  mkdirSync(projectDir);
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+
+  const output = runCli(['run', 'kai', '--agent', 'codex', '--', 'exec', '--json', 'prompt text'], {
+    cwd: projectDir,
+    env: { AGENTS_ROOT: agentsRoot, CODEX_HOME: codexHome, ACADEMY_DRY_RUN: '1', ACADEMY_CODEX_BIN: 'fake-codex' },
+  });
+
+  const agentDir = join(agentsRoot, 'kai');
+  const promptPath = join(agentDir, '.academy', 'generated', 'academy-system-prompt.md');
+  const profilePath = join(codexHome, 'academy-kai.config.toml');
+  const projectSelfUpdatePath = join(projectDir, '.agents', 'skills', 'self-update', 'SKILL.md');
+  const profile = readFileSync(profilePath, 'utf8');
+
+  assert.match(output, /Launching kai with Codex/);
+  assert.match(output, new RegExp(`\\[dry-run\\] fake-codex --profile academy-kai -C ${re(realpathSync(projectDir))}`));
+  assert.match(output, new RegExp(`--add-dir ${re(agentDir)}`));
+  assert.match(output, new RegExp(`-c model_instructions_file=${re(JSON.stringify(promptPath))}`));
+  assert.match(output, /exec --json prompt text/);
+  assert.match(output, new RegExp(`CODEX_PROFILE_PATH=${re(profilePath)}`));
+  assert.match(output, new RegExp(`ACADEMY_AGENT_DIR=${re(agentDir)}`));
+  assert.match(output, new RegExp(`ACADEMY_PROJECT_DIR=${re(realpathSync(projectDir))}`));
+  assert.match(profile, /sandbox_mode = "workspace-write"/);
+  assert.match(profile, /approval_policy = "on-request"/);
+  assert.match(profile, new RegExp(`writable_roots = \\[${re(JSON.stringify(agentDir))}\\]`));
+  assert.match(profile, new RegExp(`command = "node ${re(join(repoRoot, 'hooks', 'sync_memory.mjs'))}"`));
+  assert.doesNotMatch(profile, /api_key|model_provider|mcp_servers/i);
+  assert.equal(existsSync(projectSelfUpdatePath), true);
+  assert.match(readFileSync(projectSelfUpdatePath, 'utf8'), /^name: self-update/m);
+});
+
+test('codex project skill bridge preserves existing project-local skills', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  const codexHome = join(root, 'codex-home');
+  const projectDir = join(root, 'project');
+  const existingSkillDir = join(projectDir, '.agents', 'skills', 'check-in');
+  mkdirSync(existingSkillDir, { recursive: true });
+  writeFileSync(join(existingSkillDir, 'SKILL.md'), '---\nname: check-in\n---\n\n# Project Check In\n');
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+
+  runCli(['run', 'kai', '--agent', 'codex', '--', 'exec', 'prompt text'], {
+    cwd: projectDir,
+    env: { AGENTS_ROOT: agentsRoot, CODEX_HOME: codexHome, ACADEMY_DRY_RUN: '1', ACADEMY_CODEX_BIN: 'fake-codex' },
+  });
+
+  assert.match(readFileSync(join(existingSkillDir, 'SKILL.md'), 'utf8'), /Project Check In/);
+  assert.equal(existsSync(join(projectDir, '.agents', 'skills', 'self-update', 'SKILL.md')), true);
+  assert.equal(existsSync(join(projectDir, '.agents', 'skills', 'nightly-consolidation', 'SKILL.md')), true);
 });
 
 test('create writes and run refreshes the generated system prompt from surfaces', () => {
@@ -396,7 +479,7 @@ test('create writes and run refreshes the generated system prompt from surfaces'
   runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
 
   const agentDir = join(agentsRoot, 'kai');
-  const promptPath = join(agentDir, '.claude', 'academy-system-prompt.md');
+  const promptPath = join(agentDir, '.academy', 'generated', 'academy-system-prompt.md');
   const initialPrompt = readFileSync(promptPath, 'utf8');
 
   assert.match(initialPrompt, /Generated by `academy`/);
@@ -411,7 +494,7 @@ test('create writes and run refreshes the generated system prompt from surfaces'
   });
   const refreshedPrompt = readFileSync(promptPath, 'utf8');
 
-  assert.match(output, new RegExp(`--system-prompt-file ${promptPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(output, new RegExp(`--system-prompt-file ${re(promptPath)}`));
   assert.match(refreshedPrompt, /Kai custom identity/);
   assert.equal(surfaces.every((surface) => refreshedPrompt.includes(`<!-- academy:surface:${surface} -->`)), true);
 });
@@ -425,32 +508,48 @@ test('create scaffolds universal skills with agent-specific paths', () => {
   const selfUpdatePath = join(agentDir, '.claude', 'skills', 'self-update', 'SKILL.md');
   const checkInPath = join(agentDir, '.claude', 'skills', 'check-in', 'SKILL.md');
   const nightlyPath = join(agentDir, '.claude', 'skills', 'nightly-consolidation', 'SKILL.md');
+  const codexSelfUpdatePath = join(agentDir, '.agents', 'skills', 'self-update', 'SKILL.md');
+  const codexCheckInPath = join(agentDir, '.agents', 'skills', 'check-in', 'SKILL.md');
+  const codexNightlyPath = join(agentDir, '.agents', 'skills', 'nightly-consolidation', 'SKILL.md');
   const selfUpdateText = readFileSync(selfUpdatePath, 'utf8');
   const checkInText = readFileSync(checkInPath, 'utf8');
   const nightlyText = readFileSync(nightlyPath, 'utf8');
+  const codexSelfUpdateText = readFileSync(codexSelfUpdatePath, 'utf8');
+  const codexCheckInText = readFileSync(codexCheckInPath, 'utf8');
+  const codexNightlyText = readFileSync(codexNightlyPath, 'utf8');
 
   assert.equal(existsSync(join(agentDir, 'dreams')), true);
   assert.equal(existsSync(join(agentDir, 'memory', 'observations')), true);
   assert.equal(existsSync(join(agentDir, 'memory', 'sessions.jsonl')), true);
   assert.match(selfUpdateText, /^name: self-update/m);
-  assert.match(selfUpdateText, new RegExp(`Agent home: \`${agentDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
-  assert.match(selfUpdateText, new RegExp(`identity\\.md\`: \`${join(agentDir, 'identity.md').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
-  assert.match(selfUpdateText, new RegExp(`\\.claude/skills\`: \`${join(agentDir, '.claude', 'skills').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
+  assert.match(selfUpdateText, new RegExp(`Agent home: \`${re(agentDir)}\``));
+  assert.match(selfUpdateText, new RegExp(`identity\\.md\`: \`${re(join(agentDir, 'identity.md'))}\``));
+  assert.match(selfUpdateText, new RegExp(`\\.claude/skills\`: \`${re(join(agentDir, '.claude', 'skills'))}\``));
   assert.doesNotMatch(selfUpdateText, /\{\{[a-z_]+\}\}/);
+  assert.match(codexSelfUpdateText, /^name: self-update/m);
+  assert.match(codexSelfUpdateText, new RegExp(`\\.agents/skills\`: \`${re(join(agentDir, '.agents', 'skills'))}\``));
+  assert.match(codexSelfUpdateText, new RegExp(`This skill: \`${re(codexSelfUpdatePath)}\``));
+  assert.doesNotMatch(codexSelfUpdateText, /\{\{[a-z_]+\}\}/);
 
   assert.match(checkInText, /^name: check-in/m);
   assert.match(checkInText, /Check-in is kai's 1:1 protocol/);
-  assert.match(checkInText, new RegExp(`Agent home: \`${agentDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
-  assert.match(checkInText, new RegExp(`Self-update skill: \`${selfUpdatePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
+  assert.match(checkInText, new RegExp(`Agent home: \`${re(agentDir)}\``));
+  assert.match(checkInText, new RegExp(`Self-update skill: \`${re(selfUpdatePath)}\``));
   assert.doesNotMatch(checkInText, /\{\{[a-z_]+\}\}/);
+  assert.match(codexCheckInText, /^name: check-in/m);
+  assert.match(codexCheckInText, new RegExp(`Self-update skill: \`${re(codexSelfUpdatePath)}\``));
+  assert.doesNotMatch(codexCheckInText, /\{\{[a-z_]+\}\}/);
 
   assert.match(nightlyText, /^name: nightly-consolidation/m);
   assert.match(nightlyText, /Dreams directory:/);
   assert.match(nightlyText, /memory\/observations/);
   assert.match(nightlyText, /primary source/);
   assert.match(nightlyText, new RegExp(`dreams\``));
-  assert.match(nightlyText, new RegExp(`This skill: \`${nightlyPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
+  assert.match(nightlyText, new RegExp(`This skill: \`${re(nightlyPath)}\``));
   assert.doesNotMatch(nightlyText, /\{\{[a-z_]+\}\}/);
+  assert.match(codexNightlyText, /^name: nightly-consolidation/m);
+  assert.match(codexNightlyText, new RegExp(`This skill: \`${re(codexNightlyPath)}\``));
+  assert.doesNotMatch(codexNightlyText, /\{\{[a-z_]+\}\}/);
 });
 
 test('run backfills universal skills for existing v3 agents', () => {
@@ -469,16 +568,20 @@ test('run backfills universal skills for existing v3 agents', () => {
   const selfUpdatePath = join(agentDir, '.claude', 'skills', 'self-update', 'SKILL.md');
   const checkInPath = join(agentDir, '.claude', 'skills', 'check-in', 'SKILL.md');
   const nightlyPath = join(agentDir, '.claude', 'skills', 'nightly-consolidation', 'SKILL.md');
+  const codexSelfUpdatePath = join(agentDir, '.agents', 'skills', 'self-update', 'SKILL.md');
   const selfUpdateText = readFileSync(selfUpdatePath, 'utf8');
   const checkInText = readFileSync(checkInPath, 'utf8');
   const nightlyText = readFileSync(nightlyPath, 'utf8');
+  const codexSelfUpdateText = readFileSync(codexSelfUpdatePath, 'utf8');
 
   assert.equal(existsSync(join(agentDir, 'dreams')), true);
   assert.equal(existsSync(join(agentDir, 'memory', 'observations')), true);
   assert.equal(existsSync(join(agentDir, 'memory', 'sessions.jsonl')), true);
   assert.match(selfUpdateText, /^name: self-update/m);
-  assert.match(selfUpdateText, new RegExp(`Agent home: \`${agentDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\``));
+  assert.match(selfUpdateText, new RegExp(`Agent home: \`${re(agentDir)}\``));
   assert.doesNotMatch(selfUpdateText, /\{\{[a-z_]+\}\}/);
+  assert.match(codexSelfUpdateText, new RegExp(`\\.agents/skills\`: \`${re(join(agentDir, '.agents', 'skills'))}\``));
+  assert.doesNotMatch(codexSelfUpdateText, /\{\{[a-z_]+\}\}/);
 
   assert.match(checkInText, /^name: check-in/m);
   assert.match(checkInText, /Check-in is kai's 1:1 protocol/);
@@ -525,9 +628,86 @@ printf '%s\\n' "$@" >> "${logPath}"
   assert.match(helmArgs, /^academy$/m);
   assert.match(helmArgs, /^run$/m);
   assert.match(helmArgs, /^kai$/m);
+  assert.match(helmArgs, /^--agent$/m);
+  assert.match(helmArgs, /^claude-code$/m);
   assert.match(helmArgs, /^--permission-mode$/m);
   assert.match(helmArgs, /^auto$/m);
   assert.match(helmArgs, /nightly-consolidation skill/);
+});
+
+test('run re-registers nightly Helm task with the selected Codex runtime', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  const codexHome = join(root, 'codex-home');
+  const binDir = join(root, 'bin');
+  const logPath = join(root, 'helm-args.txt');
+  const projectDir = join(root, 'project');
+  mkdirSync(binDir);
+  mkdirSync(projectDir);
+  const helmTasks = join(binDir, 'helm-tasks');
+  writeFileSync(helmTasks, `#!/usr/bin/env bash
+printf '%s\\n' "$@" >> "${logPath}"
+`);
+  chmodSync(helmTasks, 0o755);
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+
+  runCli(['run', 'kai', '--agent', 'codex', '--', 'exec', 'smoke'], {
+    cwd: projectDir,
+    env: {
+      AGENTS_ROOT: agentsRoot,
+      CODEX_HOME: codexHome,
+      ACADEMY_DRY_RUN: '1',
+      ACADEMY_SKIP_NIGHTLY_TASK: '0',
+      ACADEMY_CODEX_BIN: 'fake-codex',
+      PATH: `${binDir}:${process.env.PATH}`,
+    },
+  });
+
+  const helmArgs = readFileSync(logPath, 'utf8');
+  assert.match(helmArgs, /^run$/m);
+  assert.match(helmArgs, /^kai$/m);
+  assert.match(helmArgs, /^--agent$/m);
+  assert.match(helmArgs, /^codex$/m);
+  assert.match(helmArgs, /^--ask-for-approval$/m);
+  assert.match(helmArgs, /^never$/m);
+  assert.match(helmArgs, /^--sandbox$/m);
+  assert.match(helmArgs, /^workspace-write$/m);
+  assert.match(helmArgs, /^exec$/m);
+  assert.match(helmArgs, /--agent\ncodex\n--\n--ask-for-approval\nnever\n--sandbox\nworkspace-write\nexec\n/);
+  assert.match(helmArgs, /nightly-consolidation skill/);
+});
+
+test('run warns but continues when nightly Helm re-registration fails', () => {
+  const root = mkdtempSync(join(tmpdir(), 'academy-cli-'));
+  const agentsRoot = join(root, 'agents');
+  const binDir = join(root, 'bin');
+  const projectDir = join(root, 'project');
+  mkdirSync(binDir);
+  mkdirSync(projectDir);
+  const helmTasks = join(binDir, 'helm-tasks');
+  writeFileSync(helmTasks, `#!/usr/bin/env bash
+echo "helm unavailable" >&2
+exit 42
+`);
+  chmodSync(helmTasks, 0o755);
+  runCli(['create', 'kai'], { env: { AGENTS_ROOT: agentsRoot } });
+
+  const result = spawnSync(node, [cli, 'run', 'kai', '--', '-p', 'smoke'], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      AGENTS_ROOT: agentsRoot,
+      ACADEMY_DRY_RUN: '1',
+      ACADEMY_SKIP_NIGHTLY_TASK: '0',
+      PATH: `${binDir}:${process.env.PATH}`,
+    },
+    cwd: projectDir,
+  });
+
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /Launching kai with Claude Code/);
+  assert.match(result.stdout, /\[dry-run\]/);
+  assert.match(result.stderr, /Warning: nightly consolidation job "kai-nightly-consolidation" not updated: helm unavailable/);
 });
 
 test('run inside the agent home stays in agent-home mode', () => {
@@ -542,7 +722,7 @@ test('run inside the agent home stays in agent-home mode', () => {
   });
 
   assert.doesNotMatch(output, /--plugin-dir/);
-  assert.match(output, new RegExp(`\\[dry-run\\] cwd=${agentDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(output, new RegExp(`\\[dry-run\\] cwd=${re(agentDir)}`));
 });
 
 test('run delegates legacy agents to their recorded academy root', () => {
