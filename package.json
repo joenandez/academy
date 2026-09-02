@@ -1,0 +1,41 @@
+{
+  "name": "@joenandez/academy",
+  "version": "0.4.0-rc.1",
+  "description": "Academy v3 — portable AI agents with 8 boot surfaces and a skills primitive.",
+  "type": "module",
+  "bin": {
+    "academy": "./bin/academy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joenandez/academy.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "bin/",
+    "scripts/agent.mjs",
+    "scripts/cli/",
+    "skills/",
+    "templates/",
+    "hooks/",
+    ".claude-plugin/",
+    "conformance/",
+    "docs/integration-guide.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "quality:setup": "node quality/run.mjs setup",
+    "quality:commit": "node quality/run.mjs commit",
+    "quality:push": "node quality/run.mjs push",
+    "quality:full": "node quality/run.mjs full"
+  },
+  "keywords": ["academy", "ai-agent", "claude-code", "portable-agent"],
+  "author": "Joe Fernandez",
+  "license": "MIT",
+  "devDependencies": {
+    "knip": "5.70.2"
+  }
+}
